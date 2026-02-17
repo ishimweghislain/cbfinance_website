@@ -89,8 +89,8 @@ $currentPage = getCurrentPage();
     </div>
 </nav>
 
-<!-- Enhanced Spacer for the new fixed height -->
-<div class="h-[120px] md:h-[130px]"></div>
+<!-- Precision Spacer to match fixed navbar height -->
+<div class="h-[116px]"></div>
 
 <script>
     // Scroll effect for the main navbar

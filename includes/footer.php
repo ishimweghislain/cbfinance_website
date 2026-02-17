@@ -32,6 +32,7 @@
                     <li><a href="requirements.php" class="hover:text-primary-green transition-colors">Requirements</a></li>
                     <li><a href="team.php" class="hover:text-primary-green transition-colors">Our Team</a></li>
                     <li><a href="contact.php" class="hover:text-primary-green transition-colors">Contact Us</a></li>
+                    <li><a href="https://app.cbfinance.rw/login.php" target="_blank" class="text-primary-light hover:text-white transition-colors flex items-center gap-2"><i class="fas fa-lock text-xs"></i> System Portal</a></li>
                 </ul>
             </div>
 

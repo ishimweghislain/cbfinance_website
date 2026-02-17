@@ -29,6 +29,9 @@ $currentPage = getCurrentPage();
                 <a href="contact.php" class="<?php echo $currentPage == 'contact.php' ? 'text-primary-green' : 'text-gray-600'; ?> hover:text-primary-green font-medium transition-colors duration-200 flex items-center gap-2">
                     <i class="fas fa-envelope text-sm"></i> Contact
                 </a>
+                <a href="https://app.cbfinance.rw/login.php" target="_blank" class="border-2 border-primary-blue text-primary-blue hover:bg-primary-blue hover:text-white px-5 py-2 rounded-full font-semibold transition-all duration-300 flex items-center gap-2">
+                    <i class="fas fa-user-lock text-sm"></i> System Portal
+                </a>
                 <a href="apply.php" class="bg-primary-green hover:bg-green-600 text-white px-6 py-2.5 rounded-full font-semibold transition-all duration-300 transform hover:scale-105 shadow-md flex items-center gap-2">
                     <i class="fas fa-paper-plane text-sm"></i> Apply Now
                 </a>

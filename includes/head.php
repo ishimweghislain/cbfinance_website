@@ -12,6 +12,8 @@ function getCurrentPage() {
     <title>CB FINANCE | Professional Financial Solutions</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="images/CAPITAL BRIDGE LOGO.png">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Font Awesome for Icons -->

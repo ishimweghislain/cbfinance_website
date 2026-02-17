@@ -87,7 +87,7 @@
                             <i class="fas fa-check text-primary-blue"></i> <span>Bank statement of the last 6 months</span>
                         </li>
                         <li class="flex items-center gap-3 text-gray-600">
-                            <i class="fas fa-check text-primary-blue"></i> <span>Collateral expertise</span>
+                            <i class="fas fa-check text-primary-blue"></i> <span>Collateral expertise after approval</span>
                         </li>
                     </ul>
                 </div>

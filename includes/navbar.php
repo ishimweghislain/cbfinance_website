@@ -36,13 +36,6 @@ $currentPage = getCurrentPage();
                     <i class="fas fa-paper-plane text-sm"></i> Apply Now
                 </a>
             </div>
-
-            <!-- Mobile Menu Button (Hamburger) - Usually hidden if using bottom nav, but good to have -->
-            <div class="md:hidden flex items-center">
-                <button id="mobile-menu-button" class="text-primary-blue focus:outline-none">
-                    <i class="fas fa-bars text-2xl"></i>
-                </button>
-            </div>
         </div>
     </div>
 </nav>

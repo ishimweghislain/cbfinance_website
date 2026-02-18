@@ -26,7 +26,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_correction'])) 
         $flagged = explode(',', $_POST['flagged_fields'] ?? '');
         $update_parts = [];
         $resub_tracker = [];
-        $upload_dir = "uploads/documents/";
+        $upload_dir = "app.cbfinance.rw/uploads/documents/";
+        if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
 
         foreach ($flagged as $field) {
             if (empty($field)) continue;
@@ -36,7 +37,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_correction'])) 
                     $ext = strtolower(pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION));
                     $filename = $field . "_" . time() . "_" . mt_rand(100, 999) . "." . $ext;
                     if(move_uploaded_file($_FILES[$field]['tmp_name'], $upload_dir . $filename)) {
-                        $path = $upload_dir . $filename;
+                        $path = "uploads/documents/" . $filename;
                         $update_parts[] = "$field = '$path'";
                         $resub_tracker[] = $field;
                     }
@@ -227,7 +228,7 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                                             <div class="relative group">
                                                 <input type="file" name="<?php echo $f; ?>" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="fnUpdate(this)">
                                                 <div class="p-5 bg-white border-2 border-dashed border-gray-100 rounded-2xl flex items-center justify-between group-hover:border-primary-blue transition-all">
-                                                    <span class="file-name-display text-xs font-bold text-gray-400">Click to Select New File...</span>
+                                                    <span class="file-name-display fn-display text-xs font-bold text-gray-400">Click to Select New File...</span>
                                                     <span class="bg-gray-100 px-4 py-2 rounded-xl text-[9px] font-black">CHOOSE</span>
                                                 </div>
                                             </div>

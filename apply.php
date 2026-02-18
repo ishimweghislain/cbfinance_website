@@ -17,7 +17,7 @@ if (isset($_GET['reapply']) && $_GET['reapply'] == 'true' && !empty($track_url_e
     if ($conn) {
         $clean_email = $conn->real_escape_string($track_url_email);
         // Only delete if it's actually rejected to allow a fresh start
-        $conn->query("DELETE FROM customers WHERE email = '$clean_email' AND (status = 'Rejected' OR status = 'Rejected ')");
+        $conn->query("DELETE FROM customers WHERE email = '$clean_email' AND (LOWER(TRIM(status)) = 'rejected' OR status = '' OR status IS NULL)");
     }
 }
 
@@ -71,11 +71,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
         if ($check && $check->num_rows > 0) {
             $existing = $check->fetch_assoc();
             $curr_stat = strtolower(trim($existing['status']));
-            if ($curr_stat != 'rejected') {
+            
+            // Fallback for DB enum issues
+            if (empty($curr_stat) && !empty($existing['correction_fields'])) {
+                $curr_stat = 'action required';
+            }
+            
+            if ($curr_stat == 'rejected') {
+                // If rejected, allow a fresh start by deleting the old record (prevents unique code conflicts)
+                $conn->query("DELETE FROM customers WHERE customer_id = " . $existing['customer_id']);
+            } elseif ($curr_stat == 'action required') {
                 $already_applied = true;
-                $error = "You already have an active application ($existing[status]). Use the tracking bar above.";
+                $error = "CORRECTION NEEDED: Admin has requested updates on your previous application. Please use the tracking bar at the top right to fix and resubmit.";
+            } elseif ($curr_stat == 'pending') {
+                $already_applied = true;
+                $error = "You already have a PENDING application. Our team is reviewing it. Use the tracking bar above for live updates.";
+            } elseif ($curr_stat == 'approved') {
+                $already_applied = true;
+                $error = "Your previous application for this email was already APPROVED. Please contact support if you need a new loan.";
             } else {
-                // If rejected, remove it to prevent unique key/email conflicts
+                // Handle cases like empty status or unknown
                 $conn->query("DELETE FROM customers WHERE customer_id = " . $existing['customer_id']);
             }
         }
@@ -162,6 +177,11 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                 <div class="max-w-2xl mx-auto p-12 rounded-[2.5rem] bg-white shadow-2xl border border-gray-100 relative">
                     <?php 
                     $stat = trim($found_customer['status']);
+                    // Fallback for cases where DB enum doesn't yet support 'Action Required'
+                    if (empty($stat) && !empty($found_customer['correction_fields'])) {
+                        $stat = 'Action Required';
+                    }
+
                     if ($stat == 'Pending'): ?>
                         <div class="w-20 h-20 bg-amber-50 text-amber-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-sm border border-amber-100"><i class="fas fa-clock text-3xl"></i></div>
                         <h4 class="text-2xl font-black text-gray-800 uppercase tracking-tight">Review In Progress</h4>

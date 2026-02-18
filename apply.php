@@ -40,6 +40,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_correction'])) 
 
         if (!empty($update_parts)) {
             $resub_json = implode(',', $resubmitted_track);
+            // After client resubmits, it goes back to 'Pending' for admin review
             $sql = "UPDATE customers SET " . implode(', ', $update_parts) . ", status = 'Pending', client_resubmitted = 1, resubmitted_fields = '$resub_json' WHERE customer_id = $cid";
             if ($conn->query($sql)) {
                 $success = "updated";
@@ -60,10 +61,12 @@ if (isset($_GET['track_email']) || isset($_GET['reapply'])) {
         
         if (isset($_GET['reapply'])) {
             if($track_email) {
-                $conn->query("DELETE FROM customers WHERE email = '$track_email' AND (status = 'Rejected' OR status = 'Action Required')");
+                // Delete previous rejections to allow fresh start
+                $conn->query("DELETE FROM customers WHERE email = '$track_email' AND status = 'Rejected'");
             }
         } elseif ($track_email) {
-            $res = $conn->query("SELECT * FROM customers WHERE email = '$track_email' LIMIT 1");
+            // Pick THE LATEST application for this email to avoid showing old rejections
+            $res = $conn->query("SELECT * FROM customers WHERE email = '$track_email' ORDER BY created_at DESC LIMIT 1");
             if ($res && $res->num_rows > 0) {
                 $found_customer = $res->fetch_assoc();
                 $success = "found"; 
@@ -74,25 +77,28 @@ if (isset($_GET['track_email']) || isset($_GET['reapply'])) {
     }
 }
 
-// Handle New Application
+// Handle New Application Submission
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application'])) {
     $conn = getWebsiteConnection();
     if ($conn) {
         $email = $conn->real_escape_string($_POST['email']);
         
+        // Final check: Don't allow new if they have an active pending/action needed one
         $check = $conn->query("SELECT customer_id, status FROM customers WHERE email = '$email'");
         if ($check && $check->num_rows > 0) {
             $existing = $check->fetch_assoc();
-            $status = strtolower($existing['status']);
-            if ($status !== 'rejected') {
+            $curr_status = strtolower(trim($existing['status']));
+            if ($curr_status !== 'rejected') {
                 $already_applied = true;
-                $error = "You have an active/pending application. Use tracking above.";
+                $error = "You already have an active application. Track it using your email above.";
             } else {
+                // If they are rejected, we clear the old one so they can start fresh
                 $conn->query("DELETE FROM customers WHERE customer_id = " . $existing['customer_id']);
             }
         }
         
         if (!$already_applied) {
+            // Sanitize all inputs
             $customer_name = $conn->real_escape_string($_POST['customer_name']);
             $phone = $conn->real_escape_string($_POST['phone']);
             $id_number = $conn->real_escape_string($_POST['nationalId']);
@@ -169,7 +175,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
         <!-- Tracking Dashboard Shortcut -->
         <div class="mb-10 flex justify-end">
             <form action="" method="GET" class="flex items-center gap-2 glass-panel p-2 rounded-2xl border border-white/20">
-                <input type="email" name="track_email" placeholder="Track application status..." required class="bg-white/90 rounded-xl px-4 py-2.5 text-xs text-gray-800 focus:ring-2 focus:ring-primary-blue outline-none min-w-[220px] font-medium">
+                <input type="email" name="track_email" placeholder="Track with registered email..." required class="bg-white/90 rounded-xl px-4 py-2.5 text-xs text-gray-800 focus:ring-2 focus:ring-primary-blue outline-none min-w-[220px] font-medium">
                 <button type="submit" class="bg-primary-blue hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-black transition-all shadow-lg active:scale-95">Track</button>
             </form>
         </div>
@@ -182,7 +188,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
 
                 <div class="max-w-2xl mx-auto p-10 rounded-[2.5rem] bg-white/40 border border-white/50 shadow-xl backdrop-blur-md">
                     <?php 
-                    $stat = $found_customer['status'];
+                    $stat = trim($found_customer['status']); // Clean status
+                    
                     if ($stat == 'Pending'): ?>
                         <div class="w-20 h-20 bg-amber-100 text-amber-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner"><i class="fas fa-hourglass-half text-3xl"></i></div>
                         <h4 class="text-2xl font-black text-amber-600 uppercase tracking-tight">Review in Progress</h4>
@@ -239,11 +246,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
                         </div>
 
                     <?php else: ?>
+                        <!-- REJECTED VIEW -->
                         <div class="w-20 h-20 bg-rose-100 text-rose-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner"><i class="fas fa-times-circle text-3xl"></i></div>
                         <h4 class="text-2xl font-black text-rose-600 uppercase tracking-tight">Application Rejected</h4>
                         <div class="mt-6 p-6 bg-rose-500/10 rounded-2xl border border-rose-500/20 mb-10 text-left">
-                            <p class="text-[10px] font-black text-rose-400 uppercase mb-2">Reason for rejection:</p>
-                            <p class="text-sm text-rose-900 font-bold italic">"<?php echo htmlspecialchars($found_customer['rejection_reason'] ?: 'Requirements not met.'); ?>"</p>
+                            <p class="text-[10px] font-black text-rose-400 uppercase mb-2">Notice from Capital Bridge:</p>
+                            <p class="text-sm text-rose-900 font-bold italic">"<?php echo htmlspecialchars($found_customer['rejection_reason'] ?: 'Unfortunately, your application does not meet our current requirements.'); ?>"</p>
                         </div>
                         <a href="apply.php?reapply=true&track_email=<?php echo urlencode($found_customer['email']); ?>" class="inline-block bg-primary-blue text-white px-12 py-5 rounded-2xl font-black text-sm shadow-2xl transition-all hover:scale-[1.05] active:scale-95 hover:bg-blue-700">START FRESH APPLICATION</a>
                     <?php endif; ?>
@@ -258,10 +266,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
             <div class="glass-card rounded-[3rem] p-16 text-center shadow-2xl animate-in">
                 <div class="w-24 h-24 <?php echo ($success === 'updated') ? 'bg-blue-100 text-primary-blue' : 'bg-emerald-100 text-emerald-600'; ?> rounded-[2.5rem] flex items-center justify-center mx-auto mb-10 shadow-lg"><i class="fas fa-paper-plane text-4xl"></i></div>
                 <h3 class="text-4xl font-black text-gray-900 mb-4"><?php echo ($success === 'updated') ? 'Resubmitted!' : 'Application Sent!'; ?></h3>
-                <p class="text-gray-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">Your details are being processed. You can track progress anytime using your email.</p>
+                <p class="text-gray-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">Your details are being processed. View progress using the tracker.</p>
                 <div class="mt-12 flex flex-col sm:flex-row gap-4 justify-center">
                     <a href="index.php" class="bg-gray-100 text-gray-600 px-10 py-5 rounded-2xl font-black text-xs hover:bg-gray-200 transition-all">HOME</a>
-                    <a href="apply.php?track_email=<?php echo urlencode($_POST['email'] ?? $found_customer['email'] ?? ''); ?>" class="bg-primary-blue text-white px-10 py-5 rounded-2xl font-black text-xs shadow-xl hover:bg-blue-700 transition-all">TRACK STATUS</a>
+                    <a href="apply.php?track_email=<?php echo urlencode($_POST['email'] ?? ''); ?>" class="bg-primary-blue text-white px-10 py-5 rounded-2xl font-black text-xs shadow-xl hover:bg-blue-700 transition-all">TRACK STATUS</a>
                 </div>
             </div>
 
@@ -459,6 +467,11 @@ function updateDocFields() {
         businessReqs.forEach(r => r.required = true);
     }
 }
+
+// Ensure first step is visible
+document.addEventListener('DOMContentLoaded', () => {
+    updateDocFields();
+});
 </script>
 
 <style>

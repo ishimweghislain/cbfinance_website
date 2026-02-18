@@ -12,12 +12,11 @@ $conn = getWebsiteConnection();
 // Initial track email if coming from URL
 $track_url_email = isset($_GET['track_email']) ? trim($_GET['track_email']) : '';
 
-// 1. HANDLE RE-APPLY (DELETE OLD REJECTED RECORD)
+// 1. HANDLE RE-APPLY (RESET TRACKING TO SHOW FORM)
 if (isset($_GET['reapply']) && $_GET['reapply'] == 'true' && !empty($track_url_email)) {
-    if ($conn) {
-        $clean_email = $conn->real_escape_string($track_url_email);
-        // We no longer delete rejected records to keep track of history as requested
-    }
+    // Clear the tracking email so the dashboard isn't shown and the form appears
+    $track_url_email = '';
+    // Optional: We no longer delete rejected records to keep track of history
 }
 
 // 2. HANDLE CORRECTION SUBMISSION

@@ -50,8 +50,8 @@
             <p class="text-gray-500 text-sm">Happy Clients</p>
         </div>
         <div class="text-center group hover:scale-105 transition-transform duration-300 border-l border-gray-100">
-            <div class="text-3xl font-bold text-primary-blue mb-1">8%</div>
-            <p class="text-gray-500 text-sm">Starting Interest</p>
+            <div class="text-3xl font-bold text-primary-blue mb-1">5%</div>
+            <p class="text-gray-500 text-sm">Monthly Interest</p>
         </div>
     </div>
 </section>
@@ -60,7 +60,7 @@
 <section class="py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="text-center mb-16">
         <h2 class="text-gray-400 font-semibold uppercase tracking-widest text-sm mb-3">Professional Edge</h2>
-        <h3 class="text-4xl font-bold text-neutral-heading">Why Choose <span class="text-primary-blue border-b-4 border-primary-green">CB Finance?</span></h3>
+        <h3 class="text-4xl font-bold text-neutral-heading uppercase tracking-tighter">Why Choose <span class="text-primary-blue border-b-4 border-primary-green">Capital Bridge Finance?</span></h3>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8">

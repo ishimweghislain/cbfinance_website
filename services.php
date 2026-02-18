@@ -4,104 +4,90 @@
 <!-- Header -->
 <section class="gradient-blue py-20">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">Our Financial Solutions</h1>
-        <p class="text-blue-100 text-lg max-w-2xl mx-auto">Tailored loan products designed to meet your individual and business needs with speed and simplicity.</p>
+        <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">Our Services</h1>
+        <p class="text-blue-100 text-lg max-w-2xl mx-auto">Currently, we specialize exclusively in loan products, providing the capital you need to succeed.</p>
     </div>
 </section>
 
-<!-- Services Grid -->
-<section class="py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
+<!-- Loans Section -->
+<section class="py-24 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-16">
+        <h2 class="text-3xl font-extrabold text-neutral-heading uppercase tracking-widest mb-4">Loan Products</h2>
+        <div class="w-24 h-1.5 bg-primary-green mx-auto rounded-full"></div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
         <!-- Salary Advance -->
-        <div class="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden group hover:-translate-y-2 transition-all duration-500">
-            <div class="h-48 overflow-hidden relative">
-                <div class="absolute inset-0 bg-primary-green opacity-10 group-hover:opacity-20 transition-opacity"></div>
-                <div class="absolute inset-0 flex items-center justify-center">
-                    <i class="fas fa-money-bill-wave text-6xl text-primary-green group-hover:scale-110 transition-transform"></i>
-                </div>
+        <div class="bg-white rounded-[2.5rem] shadow-2xl p-10 border border-gray-100 hover:border-primary-green transition-all group">
+            <div class="w-20 h-20 bg-green-50 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-primary-green transition-colors">
+                <i class="fas fa-hand-holding-usd text-3xl text-primary-green group-hover:text-white"></i>
             </div>
-            <div class="p-8">
-                <h3 class="text-2xl font-bold text-neutral-heading mb-4">Salary Advance</h3>
-                <p class="text-gray-600 mb-6">Get quick cash against your salary. Perfect for unexpected expenses before payday.</p>
-                <ul class="space-y-3 mb-8">
-                    <li class="flex items-center text-sm text-gray-500"><i class="fas fa-check-circle text-primary-green mr-2"></i> Fast Cash for Employees</li>
-                    <li class="flex items-center text-sm text-gray-500"><i class="fas fa-check-circle text-primary-green mr-2"></i> Flexible Repayment</li>
-                    <li class="flex items-center text-sm text-gray-500"><i class="fas fa-check-circle text-primary-green mr-2"></i> Competitive Rates</li>
-                </ul>
-                <a href="requirements.php" class="inline-block w-full text-center bg-gray-50 hover:bg-primary-blue hover:text-white text-primary-blue font-bold py-3 rounded-xl transition-colors">Check Requirements</a>
-            </div>
+            <h3 class="text-2xl font-bold text-neutral-heading mb-4">Salary Advance</h3>
+            <p class="text-gray-600 mb-8">Quick financial assistance for employees to cover urgent needs before the next payday.</p>
+            <a href="requirements.php" class="inline-flex items-center gap-2 bg-primary-green hover:bg-green-600 text-white px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105">
+                View Requirements <i class="fas fa-arrow-right text-xs"></i>
+            </a>
         </div>
 
         <!-- Business Loan -->
-        <div class="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden group hover:-translate-y-2 transition-all duration-500">
-            <div class="h-48 overflow-hidden relative">
-                <div class="absolute inset-0 bg-primary-blue opacity-10 group-hover:opacity-20 transition-opacity"></div>
-                <div class="absolute inset-0 flex items-center justify-center">
-                    <i class="fas fa-chart-line text-6xl text-primary-blue group-hover:scale-110 transition-transform"></i>
-                </div>
+        <div class="bg-white rounded-[2.5rem] shadow-2xl p-10 border border-gray-100 hover:border-primary-blue transition-all group">
+            <div class="w-20 h-20 bg-blue-50 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-primary-blue transition-colors">
+                <i class="fas fa-briefcase text-3xl text-primary-blue group-hover:text-white"></i>
             </div>
-            <div class="p-8">
-                <h3 class="text-2xl font-bold text-neutral-heading mb-4">Business Loan</h3>
-                <p class="text-gray-600 mb-6">Import & Clearing Financing, Invoice Advance. Fuel your business growth and expand your reach.</p>
-                <ul class="space-y-3 mb-8">
-                    <li class="flex items-center text-sm text-gray-500"><i class="fas fa-check-circle text-primary-blue mr-2"></i> For Startups & SMEs</li>
-                    <li class="flex items-center text-sm text-gray-500"><i class="fas fa-check-circle text-primary-blue mr-2"></i> Invoice Advancing</li>
-                    <li class="flex items-center text-sm text-gray-500"><i class="fas fa-check-circle text-primary-blue mr-2"></i> Quick Processing</li>
-                </ul>
-                <a href="requirements.php" class="inline-block w-full text-center bg-gray-50 hover:bg-primary-blue hover:text-white text-primary-blue font-bold py-3 rounded-xl transition-colors">Check Requirements</a>
-            </div>
-        </div>
-
-        <!-- Emergency Cash -->
-        <div class="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden group hover:-translate-y-2 transition-all duration-500">
-            <div class="h-48 overflow-hidden relative">
-                <div class="absolute inset-0 bg-primary-light opacity-10 group-hover:opacity-20 transition-opacity"></div>
-                <div class="absolute inset-0 flex items-center justify-center">
-                    <i class="fas fa-clock text-6xl text-primary-light group-hover:scale-110 transition-transform"></i>
-                </div>
-            </div>
-            <div class="p-8">
-                <h3 class="text-2xl font-bold text-neutral-heading mb-4">Emergency Cash</h3>
-                <p class="text-gray-600 mb-6">Fund your Purchase Orders quickly. Don't let opportunity pass you by when you need it most.</p>
-                <ul class="space-y-3 mb-8">
-                    <li class="flex items-center text-sm text-gray-500"><i class="fas fa-check-circle text-primary-light mr-2"></i> Instant Approval</li>
-                    <li class="flex items-center text-sm text-gray-500"><i class="fas fa-check-circle text-primary-light mr-2"></i> Minutes to Cash</li>
-                    <li class="flex items-center text-sm text-gray-500"><i class="fas fa-check-circle text-primary-light mr-2"></i> No Hidden Fees</li>
-                </ul>
-                <a href="requirements.php" class="inline-block w-full text-center bg-gray-50 hover:bg-primary-blue hover:text-white text-primary-blue font-bold py-3 rounded-xl transition-colors">Check Requirements</a>
-            </div>
+            <h3 class="text-2xl font-bold text-neutral-heading mb-4">Business Loan</h3>
+            <p class="text-gray-600 mb-8">Strategic funding for businesses, startups, and SMEs to scale operations and handle larger projects.</p>
+            <a href="requirements.php" class="inline-flex items-center gap-2 bg-primary-blue hover:bg-blue-800 text-white px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105">
+                View Requirements <i class="fas fa-arrow-right text-xs"></i>
+            </a>
         </div>
     </div>
 </section>
 
-<!-- Charges Section -->
+<!-- Fee Structure -->
 <section class="py-24 bg-gray-50">
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="text-center mb-16">
-            <h3 class="text-3xl font-bold text-neutral-heading">Transparent Fee Structure</h3>
-            <p class="text-gray-500 mt-4">We believe in clarity and fairness. Here are our standard charges.</p>
-        </div>
+        <div class="bg-white rounded-[3rem] shadow-xl overflow-hidden">
+            <div class="bg-[#1A1F2E] p-10 text-center">
+                <h3 class="text-2xl font-bold text-white">Transparent Pricing</h3>
+                <p class="text-gray-400 mt-2">No hidden costs. Simple and fair rates for everyone.</p>
+            </div>
+            
+            <div class="p-10">
+                <div class="space-y-6">
+                    <!-- Interest Rate -->
+                    <div class="flex items-center justify-between p-6 bg-blue-50 rounded-2xl border border-blue-100">
+                        <div>
+                            <span class="block font-bold text-primary-blue uppercase text-xs tracking-widest mb-1">Interest Rate</span>
+                            <span class="text-gray-700 font-medium">Monthly reducing balance</span>
+                        </div>
+                        <div class="text-3xl font-black text-primary-blue">5%</div>
+                    </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="bg-white p-6 rounded-2xl shadow-sm flex items-center justify-between border-l-4 border-primary-green">
-                <span class="font-semibold text-gray-700">Application Fee</span>
-                <span class="text-primary-green font-bold">10,000 Rwf <small class="text-gray-400 font-normal">(Non-refundable)</small></span>
-            </div>
-            <div class="bg-white p-6 rounded-2xl shadow-sm flex items-center justify-between border-l-4 border-primary-blue">
-                <span class="font-semibold text-gray-700">Interest Rate</span>
-                <span class="text-primary-blue font-bold">8%</span>
-            </div>
-            <div class="bg-white p-6 rounded-2xl shadow-sm flex items-center justify-between border-l-4 border-primary-light">
-                <span class="font-semibold text-gray-700">Admin Fee</span>
-                <span class="text-primary-light font-bold">2%</span>
-            </div>
-            <div class="bg-white p-6 rounded-2xl shadow-sm flex items-center justify-between border-l-4 border-accent-teal">
-                <span class="font-semibold text-gray-700">Commission</span>
-                <span class="text-accent-teal font-bold">1.5%</span>
-            </div>
-            <div class="bg-white p-6 rounded-2xl shadow-sm flex items-center justify-between border-l-4 border-red-500 col-span-1 md:col-span-2">
-                <span class="font-semibold text-gray-700">Late Payment Fee</span>
-                <span class="text-red-500 font-bold">10% <small class="text-gray-400 font-normal">(In case of default)</small></span>
+                    <!-- Application Fee -->
+                    <div class="flex items-center justify-between p-6 bg-green-50 rounded-2xl border border-green-100">
+                        <div>
+                            <span class="block font-bold text-primary-green uppercase text-xs tracking-widest mb-1">Application Fee</span>
+                            <span class="text-gray-700 font-medium">Standard processing fee</span>
+                        </div>
+                        <div class="text-2xl font-black text-primary-green text-right">
+                            10,000 - 15,000 <br>
+                            <small class="text-[10px] uppercase tracking-tighter text-gray-400">RWF (One-time)</small>
+                        </div>
+                    </div>
+
+                    <!-- Commission -->
+                    <div class="flex items-center justify-between p-6 bg-gray-50 rounded-2xl border border-gray-100">
+                        <div>
+                            <span class="block font-bold text-gray-400 uppercase text-xs tracking-widest mb-1">Commission</span>
+                            <span class="text-gray-600 font-medium">Processing commission</span>
+                        </div>
+                        <div class="text-2xl font-black text-gray-700">1.5%</div>
+                    </div>
+                </div>
+
+                <div class="mt-10 text-center">
+                    <p class="text-sm text-gray-400">Note: Terms and conditions apply to all loan products.</p>
+                </div>
             </div>
         </div>
     </div>

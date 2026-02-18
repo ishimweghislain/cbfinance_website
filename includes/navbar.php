@@ -76,13 +76,13 @@ $currentPage = getCurrentPage();
                     
                     <!-- Vertical Divider -->
                     <div class="h-8 w-[1px] bg-gray-100 mx-2"></div>
-
+<a href="apply.php" class="bg-primary-green hover:bg-green-600 text-white px-6 py-2.5 rounded-full font-bold text-sm transition-all duration-300 transform hover:shadow-xl flex items-center gap-2 h-11">
+                        Apply Now
+                    </a>
                     <a href="https://app.cbfinance.rw/login.php" target="_blank" class="border-2 border-primary-blue/20 text-primary-blue hover:bg-primary-blue hover:text-white px-5 py-2 rounded-full font-bold text-sm transition-all duration-300 flex items-center gap-2 group">
                         <i class="fas fa-lock text-xs text-primary-blue group-hover:text-white"></i> Portal
                     </a>
-                    <a href="apply.php" class="bg-primary-green hover:bg-green-600 text-white px-6 py-2.5 rounded-full font-bold text-sm transition-all duration-300 transform hover:shadow-xl flex items-center gap-2 h-11">
-                        Apply Now
-                    </a>
+                    
                 </div>
             </div>
         </div>

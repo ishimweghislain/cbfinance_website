@@ -4,8 +4,8 @@
 <!-- Header -->
 <section class="gradient-green py-20">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">Loan Requirements</h1>
-        <p class="text-green-100 text-lg max-w-2xl mx-auto">Everything you need to prepare before starting your application with CB Finance.</p>
+        <h1 class="text-4xl md:text-5xl font-bold text-white mb-4 uppercase tracking-tighter">Loan Requirements</h1>
+        <p class="text-green-100 text-lg max-w-2xl mx-auto">Prepare your documentation for a smooth and fast application process.</p>
     </div>
 </section>
 
@@ -13,81 +13,82 @@
 <section class="py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-16">
         <!-- Salary Advance -->
-        <div class="bg-white rounded-3xl p-8 md:p-12 shadow-xl border border-gray-100 relative overflow-hidden">
-            <div class="absolute top-0 right-0 p-8">
-                <i class="fas fa-briefcase text-6xl text-primary-green opacity-10"></i>
-            </div>
-            <h3 class="text-3xl font-bold text-neutral-heading mb-8">Salary Advance Loan</h3>
-            <p class="text-primary-green font-semibold mb-6 flex items-center"><i class="fas fa-user-tie mr-2"></i> For Employees</p>
+        <div class="bg-white rounded-[3rem] p-10 md:p-14 shadow-2xl border border-gray-50 relative group">
+            <div class="absolute -top-6 -right-6 w-24 h-24 bg-primary-green/10 rounded-full blur-2xl group-hover:scale-150 transition-transform"></div>
             
-            <div class="space-y-6">
-                <div class="flex items-start gap-4">
-                    <div class="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center flex-shrink-0 mt-1">
-                        <i class="fas fa-receipt text-primary-green text-sm"></i>
-                    </div>
-                    <div>
-                        <p class="font-bold text-gray-800 leading-none mb-1">Application Fee</p>
-                        <p class="text-gray-500 text-sm">10,000 Rwf (Non-refundable)</p>
-                    </div>
+            <div class="flex items-center gap-4 mb-10">
+                <div class="w-16 h-16 bg-green-50 rounded-2xl flex items-center justify-center text-primary-green text-3xl">
+                    <i class="fas fa-id-card"></i>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-black text-neutral-heading uppercase tracking-tighter">Salary Loan</h3>
+                    <p class="text-primary-green font-bold text-sm tracking-widest flex items-center gap-2"><i class="fas fa-user-check"></i> FOR EMPLOYEES</p>
+                </div>
+            </div>
+            
+            <div class="space-y-8">
+                <div class="bg-gray-50 p-6 rounded-3xl flex items-center justify-between">
+                    <span class="font-bold text-gray-700">Application Fee</span>
+                    <span class="bg-white px-4 py-2 rounded-xl text-primary-green font-black shadow-sm">10,000 - 15,000 RWF</span>
                 </div>
 
-                <div class="space-y-4">
-                    <h4 class="font-bold text-gray-700 border-b border-gray-100 pb-2">Required Documents:</h4>
-                    <ul class="space-y-3">
-                        <li class="flex items-center gap-3 text-gray-600">
-                            <i class="fas fa-check text-primary-green"></i> <span>Copy of employment contract</span>
+                <div class="space-y-5">
+                    <h4 class="font-black text-gray-800 uppercase tracking-widest text-xs border-l-4 border-primary-green pl-3">Mandatory Documentation:</h4>
+                    <ul class="space-y-4">
+                        <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-green transition-colors">
+                            <i class="fas fa-file-pdf text-primary-green"></i> <span class="text-sm font-medium">Valid National ID (Copy)</span>
                         </li>
-                        <li class="flex items-center gap-3 text-gray-600">
-                            <i class="fas fa-check text-primary-green"></i> <span>Three (3) recent pay slips</span>
+                        <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-green transition-colors">
+                            <i class="fas fa-file-signature text-primary-green"></i> <span class="text-sm font-medium">Professional Work Contract</span>
                         </li>
-                        <li class="flex items-center gap-3 text-gray-600">
-                            <i class="fas fa-check text-primary-green"></i> <span>Marital status certificate</span>
+                        <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-green transition-colors">
+                            <i class="fas fa-university text-primary-green"></i> <span class="text-sm font-medium">Bank Statement (Last 6 Months)</span>
                         </li>
-                        <li class="flex items-center gap-3 text-gray-600">
-                            <i class="fas fa-check text-primary-green"></i> <span>Bank statement of the last 6 months</span>
+                        <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-green transition-colors">
+                            <i class="fas fa-money-check-alt text-primary-green"></i> <span class="text-sm font-medium">Three (3) Latest Payslips</span>
+                        </li>
+                        <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-green transition-colors">
+                            <i class="fas fa-ring text-primary-green"></i> <span class="text-sm font-medium">Marital Status Certificate (If Married)</span>
                         </li>
                     </ul>
-                    <p class="text-sm text-gray-400 italic mt-4">* Salary assignment / Commitment letter (Optional)</p>
                 </div>
             </div>
         </div>
 
-        <!-- Emergency / Business Loan -->
-        <div class="bg-white rounded-3xl p-8 md:p-12 shadow-xl border border-gray-100 relative overflow-hidden">
-            <div class="absolute top-0 right-0 p-8">
-                <i class="fas fa-building text-6xl text-primary-blue opacity-10"></i>
-            </div>
-            <h3 class="text-3xl font-bold text-neutral-heading mb-8">Emergency / Business Loan</h3>
-            <p class="text-primary-blue font-semibold mb-6 flex items-center"><i class="fas fa-rocket mr-2"></i> For Entrepreneurs & Immediate Cash</p>
+        <!-- Business Loan -->
+        <div class="bg-white rounded-[3rem] p-10 md:p-14 shadow-2xl border border-gray-50 relative group">
+            <div class="absolute -top-6 -right-6 w-24 h-24 bg-primary-blue/10 rounded-full blur-2xl group-hover:scale-150 transition-transform"></div>
             
-            <div class="space-y-6">
-                <div class="flex items-start gap-4">
-                    <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0 mt-1">
-                        <i class="fas fa-receipt text-primary-blue text-sm"></i>
-                    </div>
-                    <div>
-                        <p class="font-bold text-gray-800 leading-none mb-1">Application Fee</p>
-                        <p class="text-gray-500 text-sm">10,000 Rwf (Non-refundable)</p>
-                    </div>
+            <div class="flex items-center gap-4 mb-10">
+                <div class="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-primary-blue text-3xl">
+                    <i class="fas fa-store"></i>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-black text-neutral-heading uppercase tracking-tighter">Business Loan</h3>
+                    <p class="text-primary-blue font-bold text-sm tracking-widest flex items-center gap-2"><i class="fas fa-chart-line"></i> FOR ENTREPRENEURS</p>
+                </div>
+            </div>
+            
+            <div class="space-y-8">
+                <div class="bg-gray-50 p-6 rounded-3xl flex items-center justify-between">
+                    <span class="font-bold text-gray-700">Application Fee</span>
+                    <span class="bg-white px-4 py-2 rounded-xl text-primary-blue font-black shadow-sm">10,000 - 15,000 RWF</span>
                 </div>
 
-                <div class="space-y-4">
-                    <h4 class="font-bold text-gray-700 border-b border-gray-100 pb-2">Required Documents:</h4>
-                    <ul class="space-y-3">
-                        <li class="flex items-center gap-3 text-gray-600">
-                            <i class="fas fa-check text-primary-blue"></i> <span>Copy of ID</span>
+                <div class="space-y-5">
+                    <h4 class="font-black text-gray-800 uppercase tracking-widest text-xs border-l-4 border-primary-blue pl-3">Mandatory Documentation:</h4>
+                    <ul class="space-y-4">
+                        <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-blue transition-colors">
+                            <i class="fas fa-id-card text-primary-blue"></i> <span class="text-sm font-medium">Valid National ID (Copy)</span>
                         </li>
-                        <li class="flex items-center gap-3 text-gray-600">
-                            <i class="fas fa-check text-primary-blue"></i> <span>Copy of Spouse/Guarantor ID</span>
+                        <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-blue transition-colors">
+                            <i class="fas fa-certificate text-primary-blue"></i> <span class="text-sm font-medium">RDB Registration Certificate</span>
                         </li>
-                        <li class="flex items-center gap-3 text-gray-600">
-                            <i class="fas fa-check text-primary-blue"></i> <span>Marital status certificate</span>
+                        <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-blue transition-colors">
+                            <i class="fas fa-history text-primary-blue"></i> <span class="text-sm font-medium">Bank or MoMo Statement (Last 6 Months)</span>
                         </li>
-                        <li class="flex items-center gap-3 text-gray-600">
-                            <i class="fas fa-check text-primary-blue"></i> <span>Bank statement of the last 6 months</span>
-                        </li>
-                        <li class="flex items-center gap-3 text-gray-600">
-                            <i class="fas fa-check text-primary-blue"></i> <span>Collateral expertise after approval</span>
+                        <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-blue transition-colors">
+                            <i class="fas fa-ring text-primary-blue"></i> <span class="text-sm font-medium">Marital Status Certificate (If Married)</span>
                         </li>
                     </ul>
                 </div>
@@ -96,47 +97,34 @@
     </div>
 </section>
 
-<!-- Tariff and Mandatory Charges -->
-<section class="py-24 bg-primary-blue text-white overflow-hidden relative">
-    <div class="absolute inset-0 opacity-10 pointer-events-none">
-        <div class="absolute top-0 left-0 w-full h-full bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:20px_20px]"></div>
-    </div>
-    
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        <div class="text-center mb-16">
-            <h3 class="text-4xl font-bold mb-4">Tarrif & Fees</h3>
-            <p class="text-blue-100">Quick breakdown of management and government-mandated fees</p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-5xl mx-auto">
-            <!-- Tariff -->
-            <div class="bg-white/10 backdrop-blur-md rounded-3xl p-10 border border-white/20">
-                <h4 class="text-2xl font-bold mb-8 flex items-center"><i class="fas fa-percentage mr-3 text-primary-green"></i> Management Tariff</h4>
-                <div class="space-y-8">
-                    <div class="flex justify-between items-end border-b border-white/10 pb-4">
-                        <span class="text-blue-100">Management Fee</span>
-                        <span class="text-3xl font-bold text-primary-green">5.5% <small class="text-sm font-normal text-blue-200">monthly</small></span>
-                    </div>
-                    <div class="flex justify-between items-end border-b border-white/10 pb-4">
-                        <span class="text-blue-100">Interest</span>
-                        <span class="text-3xl font-bold text-primary-green">5% <small class="text-sm font-normal text-blue-200">on reducing balance</small></span>
-                    </div>
+<!-- Tariff Section -->
+<section class="py-24 bg-[#1A1F2E] text-white relative overflow-hidden">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+        <h3 class="text-4xl font-black mb-12 uppercase tracking-tighter">Tariff & Rates</h3>
+        
+        <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[3rem] p-12 hover:bg-white/[0.08] transition-all">
+            <div class="flex flex-col md:flex-row items-center justify-around gap-12">
+                <div class="text-center">
+                    <span class="block text-gray-400 font-bold uppercase tracking-widest text-xs mb-3">Interest Rate</span>
+                    <span class="text-6xl font-black text-primary-green">5%</span>
+                    <p class="text-blue-100/60 text-xs mt-2 uppercase">Monthly Reducing Balance</p>
+                </div>
+                <div class="w-[1px] h-20 bg-white/10 hidden md:block"></div>
+                <div class="text-center">
+                    <span class="block text-gray-400 font-bold uppercase tracking-widest text-xs mb-3">Commission</span>
+                    <span class="text-6xl font-black text-primary-light">1.5%</span>
+                    <p class="text-blue-100/60 text-xs mt-2 uppercase">Processing Fee</p>
                 </div>
             </div>
-
-            <!-- Mandatory Charges -->
-            <div class="bg-white/10 backdrop-blur-md rounded-3xl p-10 border border-white/20">
-                <h4 class="text-2xl font-bold mb-8 flex items-center"><i class="fas fa-university mr-3 text-primary-light"></i> Mandatory Charges</h4>
-                <p class="text-sm text-blue-200 mb-8 italic">Paid directly to third parties – not CB Finance</p>
-                <div class="space-y-8">
-                    <div class="flex justify-between items-end border-b border-white/10 pb-4">
-                        <span class="text-blue-100">Notary Fee</span>
-                        <span class="text-3xl font-bold text-primary-light">13,000 <small class="text-sm font-normal text-blue-200">Rwf</small></span>
-                    </div>
-                    <div class="flex justify-between items-end border-b border-white/10 pb-4">
-                        <span class="text-blue-100">RDB Collateral Registration</span>
-                        <span class="text-3xl font-bold text-primary-light">20,000 <small class="text-sm font-normal text-blue-200">Rwf</small></span>
-                    </div>
+            
+            <div class="mt-16 pt-8 border-t border-white/5 grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-primary-green"><i class="fas fa-shield-alt"></i></div>
+                    <p class="text-xs text-gray-400">Zero hidden management fees compared to market standards.</p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-primary-light"><i class="fas fa-bolt"></i></div>
+                    <p class="text-xs text-gray-400">Fast approval within 48 hours of document verification.</p>
                 </div>
             </div>
         </div>

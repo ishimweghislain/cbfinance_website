@@ -129,13 +129,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
                 doc_id, doc_contract, doc_statement, doc_payslip, doc_marital, doc_rdb,
                 birth_place, account_number, occupation, gender, date_of_birth,
                 father_name, mother_name, spouse, spouse_occupation, spouse_phone, marriage_type,
-                address, location, project, project_location, caution_location, status
+                province, address, location, project, project_location, caution_location, status
             ) VALUES (
                 '$code', '$data[customer_name]', '$email', '$data[phone]', '$data[nationalId]', '$data[loan_type]',
                 '{$doc_paths['doc_id']}', '{$doc_paths['doc_contract']}', '{$doc_paths['doc_statement']}', '{$doc_paths['doc_payslip']}', '{$doc_paths['doc_marital']}', '{$doc_paths['doc_rdb']}',
                 '$data[birth_place]', '$data[account_number]', '$data[occupation]', '$data[gender]', '$data[dob]',
                 '$data[father_name]', '$data[mother_name]', '$data[spouse]', '$data[spouse_occupation]', '$data[spouse_phone]', '$data[marriage_type]',
-                '$data[address]', '$data[location]', '$data[project]', '$data[project_location]', '$data[caution_location]', 'Pending'
+                '$data[province]', '$data[address]', '$data[location]', '$data[project]', '$data[project_location]', '$data[caution_location]', 'Pending'
             )";
 
             if ($conn->query($sql)) $success = "created";
@@ -303,10 +303,26 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4 tracking-widest">Full Name</label><input type="text" name="customer_name" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold shadow-sm outline-none focus:border-primary-blue transition-all placeholder:text-gray-200" placeholder="e.g. John Doe"></div>
-                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4 tracking-widest">Email Address</label><input type="email" name="email" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold shadow-sm outline-none focus:border-primary-blue transition-all" placeholder="name@example.com"></div>
-                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4 tracking-widest">Phone</label><input type="tel" name="phone" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold shadow-sm outline-none focus:border-primary-blue transition-all" placeholder="07XXXXXXXX"></div>
-                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4 tracking-widest">National ID</label><input type="text" name="nationalId" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold shadow-sm outline-none focus:border-primary-blue transition-all" placeholder="119XXXXXXXXXXXXX"></div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4 tracking-widest">Full Name</label>
+                                <input type="text" name="customer_name" id="customer_name" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold shadow-sm outline-none focus:border-primary-blue transition-all placeholder:text-gray-200" placeholder="e.g. John Doe">
+                                <p class="err-msg text-[10px] text-rose-500 font-bold pl-4 hidden"></p>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4 tracking-widest">Email Address</label>
+                                <input type="email" name="email" id="email" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold shadow-sm outline-none focus:border-primary-blue transition-all" placeholder="name@example.com">
+                                <p class="err-msg text-[10px] text-rose-500 font-bold pl-4 hidden"></p>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4 tracking-widest">Phone</label>
+                                <input type="tel" name="phone" id="phone" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold shadow-sm outline-none focus:border-primary-blue transition-all" placeholder="07XXXXXXXX">
+                                <p class="err-msg text-[10px] text-rose-500 font-bold pl-4 hidden"></p>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4 tracking-widest">National ID</label>
+                                <input type="text" name="nationalId" id="nationalId" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold shadow-sm outline-none focus:border-primary-blue transition-all" placeholder="119XXXXXXXXXXXXX">
+                                <p class="err-msg text-[10px] text-rose-500 font-bold pl-4 hidden"></p>
+                            </div>
                         </div>
 
                         <button type="button" onclick="np(1)" class="w-full bg-primary-blue text-white py-5 rounded-2xl font-black text-xs shadow-2xl hover:bg-blue-700 transition-all flex items-center justify-center gap-3 active:scale-95">CONTINUE <i class="fas fa-arrow-right text-[10px]"></i></button>
@@ -315,13 +331,34 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                     <!-- STEP 2 -->
                     <div id="step-2" class="form-step space-y-10 hidden">
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Birth Place</label><input type="text" name="birth_place" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div>
-                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Gender</label><select name="gender" class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"><option value="male">Male</option><option value="female">Female</option></select></div>
-                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Date of Birth</label><input type="date" name="dob" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Birth Place</label>
+                                <input type="text" name="birth_place" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Gender</label>
+                                <select name="gender" class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold">
+                                    <option value="male">Male</option>
+                                    <option value="female">Female</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Date of Birth</label>
+                                <input type="date" name="dob" id="dob" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold">
+                                <p class="err-msg text-[10px] text-rose-500 font-bold pl-4 hidden"></p>
+                            </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Father Name</label><input type="text" name="father_name" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div>
-                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Mother Name</label><input type="text" name="mother_name" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Father Name</label>
+                                <input type="text" name="father_name" id="father_name" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold">
+                                <p class="err-msg text-[10px] text-rose-500 font-bold pl-4 hidden"></p>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Mother Name</label>
+                                <input type="text" name="mother_name" id="mother_name" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold">
+                                <p class="err-msg text-[10px] text-rose-500 font-bold pl-4 hidden"></p>
+                            </div>
                         </div>
                         <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Marriage Status</label><select name="marriage_type" id="marriage_type" onchange="tsf()" class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"><option value="Single">Single</option><option value="Ivanga mutungo">Ivanga</option><option value="Ivangura mutungo">Ivangura</option><option value="Muhahano">Muhahano</option></select></div>
                         <div id="spouse_fields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-8"><div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Spouse Name</label><input type="text" name="spouse" class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div><div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Spouse Phone</label><input type="tel" name="spouse_phone" class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div></div>
@@ -332,7 +369,28 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                     <div id="step-3" class="form-step space-y-10 hidden">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-8"><div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Occupation</label><input type="text" name="occupation" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div><div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Account Number</label><input type="text" name="account_number" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div></div>
                         <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Resident Address</label><input type="text" name="address" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6"><div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Project</label><input type="text" name="project" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div><div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Location</label><input type="text" name="location" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div><div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Project Loc.</label><input type="text" name="project_location" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div><div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Caution Loc.</label><input type="text" name="caution_location" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div></div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Project Purpose</label><input type="text" name="project" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold" placeholder="e.g. Household expansion"></div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Select Province</label>
+                                <select name="province" id="province" required onchange="updateDistricts()" class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold">
+                                    <option value="">Choose Province...</option>
+                                    <option value="Kigali City">Kigali City</option>
+                                    <option value="Eastern Province">Eastern Province</option>
+                                    <option value="Northern Province">Northern Province</option>
+                                    <option value="Southern Province">Southern Province</option>
+                                    <option value="Western Province">Western Province</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Select District</label>
+                                <select name="location" id="district" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold">
+                                    <option value="">Choose District...</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Project Loc.</label><input type="text" name="project_location" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div>
+                            <div class="space-y-2"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Caution Loc.</label><input type="text" name="caution_location" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold"></div>
+                        </div>
                         <div class="flex gap-4 pt-10"><button type="button" onclick="np(-1)" class="w-1/3 bg-gray-100 p-5 rounded-2xl font-black text-gray-400 text-xs">BACK</button><button type="button" onclick="np(1)" class="w-2/3 bg-primary-blue text-white p-5 rounded-2xl font-black text-xs shadow-2xl">NEXT: FILES</button></div>
                     </div>
 
@@ -357,11 +415,113 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
 </main>
 
 <script>
+const rwData = {
+    'Kigali City': ['Gasabo', 'Kicukiro', 'Nyarugenge'],
+    'Eastern Province': ['Bugesera', 'Gatsibo', 'Kayonza', 'Kirehe', 'Ngoma', 'Nyagatare', 'Rwamagana'],
+    'Northern Province': ['Burera', 'Gakenke', 'Gicumbi', 'Musanze', 'Rulindo'],
+    'Southern Province': ['Gisagara', 'Huye', 'Kamonyi', 'Muhanga', 'Nyamagabe', 'Nyanza', 'Nyaruguru', 'Ruhango'],
+    'Western Province': ['Karongi', 'Ngororero', 'Nyabihu', 'Nyamasheke', 'Rubavu', 'Rusizi', 'Rutsiro']
+};
+
+function updateDistricts() {
+    const prov = document.getElementById('province').value;
+    const distSelect = document.getElementById('district');
+    distSelect.innerHTML = '<option value="">Choose District...</option>';
+    if (rwData[prov]) {
+        rwData[prov].forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d;
+            opt.innerText = d;
+            distSelect.appendChild(opt);
+        });
+    }
+}
+
 let cs = 1;
+
+function showError(id, msg) {
+    const input = document.getElementById(id);
+    const err = input.parentElement.querySelector('.err-msg');
+    if (err) {
+        err.innerText = msg;
+        err.classList.remove('hidden');
+        input.classList.add('border-rose-400');
+    }
+}
+
+function clearErrors() {
+    document.querySelectorAll('.err-msg').forEach(e => e.classList.add('hidden'));
+    document.querySelectorAll('input, select').forEach(i => i.classList.remove('border-rose-400'));
+}
+
+function val() {
+    clearErrors();
+    const active = document.getElementById("step-" + cs);
+    const inputs = active.querySelectorAll("input[required], select[required]");
+    let ok = true;
+
+    // Basic required check
+    for (let i of inputs) {
+        if (!i.value) {
+            i.classList.add("border-rose-400");
+            ok = false;
+        }
+    }
+
+    // Advanced Validation
+    if (cs === 1) {
+        const name = document.getElementById('customer_name').value.trim();
+        if (name && name.split(' ').length < 2) {
+            showError('customer_name', 'Please provide at least 2 names.');
+            ok = false;
+        }
+
+        const phone = document.getElementById('phone').value.trim();
+        if (phone && !/^(078|079|072|073)[0-9]{7}$/.test(phone)) {
+            showError('phone', 'Please enter a valid 10-digit phone number (e.g. 078XXXXXXX).');
+            ok = false;
+        }
+
+        const nid = document.getElementById('nationalId').value.trim();
+        if (nid && nid.length !== 16) {
+            showError('nationalId', 'Invalid ID. Must be exactly 16 digits.');
+            ok = false;
+        }
+    }
+
+    if (cs === 2) {
+        const dob = new Date(document.getElementById('dob').value);
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+        
+        if (age < 18) {
+            showError('dob', 'Access denied. You must be at least 18 years old.');
+            ok = false;
+        }
+
+        const fname = document.getElementById('father_name').value.trim();
+        if (fname && fname.split(' ').length < 2) {
+            showError('father_name', 'Full father name required (min 2 names).');
+            ok = false;
+        }
+
+        const mname = document.getElementById('mother_name').value.trim();
+        if (mname && mname.split(' ').length < 2) {
+            showError('mother_name', 'Full mother name required (min 2 names).');
+            ok = false;
+        }
+    }
+
+    return ok;
+}
+
 function fnUpdate(i) {
     const d = i.parentElement.querySelector('.fn-display');
     if (i.files.length > 0) { d.innerText = i.files[0].name; d.classList.remove('text-gray-400'); d.classList.add('text-primary-blue'); }
 }
+
 function np(n) {
     const s = document.querySelectorAll(".form-step");
     if (n === 1 && !val()) return;
@@ -370,25 +530,13 @@ function np(n) {
     s[cs-1].classList.remove("hidden");
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
-function val() {
-    const active = document.getElementById("step-" + cs);
-    const inputs = active.querySelectorAll("input[required], select[required], input[type='radio'][required]");
-    let ok = true;
-    for (let i of inputs) {
-        if (i.type === 'radio') {
-            const group = active.querySelectorAll(`input[name="${i.name}"]`);
-            const checked = Array.from(group).some(r => r.checked);
-            if (!checked) { ok = false; group[0].closest('.bg-gray-50').classList.add("border-rose-400"); }
-        } else if (!i.value) { i.classList.add("border-rose-400"); ok = false; }
-        else { i.classList.remove("border-rose-400"); if(i.name === 'loan_type') i.closest('.bg-gray-50').classList.remove("border-rose-400"); }
-    }
-    return ok;
-}
+
 function tsf() {
     const v = document.getElementById('marriage_type').value;
     const f = document.getElementById('spouse_fields');
     if (v === 'Single') f.classList.add('hidden'); else f.classList.remove('hidden');
 }
+
 function udf() {
     const r = document.querySelector('input[name="loan_type"]:checked');
     if(!r) return;

@@ -55,7 +55,7 @@ if (isset($_GET['track_email']) || isset($_GET['reapply'])) {
         $track_email = $conn->real_escape_string($_GET['track_email'] ?? '');
         
         if (isset($_GET['reapply'])) {
-            // Show form
+            // Show new application form
         } elseif ($track_email) {
             $res = $conn->query("SELECT * FROM customers WHERE email = '$track_email' LIMIT 1");
             if ($res && $res->num_rows > 0) {
@@ -161,167 +161,247 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
         <div class="mb-8 flex justify-end">
             <form action="" method="GET" class="flex items-center gap-2 bg-white/10 p-2 rounded-2xl backdrop-blur-md border border-white/20">
                 <input type="email" name="track_email" placeholder="Track application email" required class="bg-white rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:ring-2 focus:ring-primary-green outline-none min-w-[200px]">
-                <button type="submit" class="bg-primary-green hover:bg-green-600 text-white px-4 py-1.5 rounded-xl text-xs font-bold transition-all">Check Status</button>
+                <button type="submit" class="bg-primary-green hover:bg-green-600 text-white px-4 py-1.5 rounded-xl text-xs font-bold transition-all shadow-md">Check Status</button>
             </form>
         </div>
 
         <?php if ($success === "found" && isset($found_customer)): ?>
-            <div class="bg-white rounded-[2.5rem] shadow-2xl p-10 md:p-16 text-center">
+            <!-- CLIENT DASHBOARD VIEW -->
+            <div class="bg-white rounded-[2.5rem] shadow-2xl p-10 md:p-16 text-center animate-[fadeIn_0.5s_ease-out]">
                 <h2 class="text-3xl font-black text-gray-800 mb-2">Hello, <?php echo htmlspecialchars(explode(' ', $found_customer['customer_name'])[0]); ?></h2>
-                <p class="text-gray-400 mb-8">Application Status ID: <span class="text-primary-blue font-bold"><?php echo $found_customer['customer_code']; ?></span></p>
+                <p class="text-gray-400 mb-8 font-bold">Application ID: <span class="text-primary-blue"><?php echo $found_customer['customer_code']; ?></span></p>
 
-                <div class="max-w-md mx-auto p-8 rounded-[2rem] bg-gray-50 border border-gray-100">
+                <div class="max-w-xl mx-auto p-10 rounded-[2.5rem] bg-gray-50 border border-gray-100 shadow-inner">
                     <?php 
                     $stat = $found_customer['status'];
                     if ($stat == 'Pending'): ?>
-                        <div class="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-clock text-2xl"></i></div>
-                        <h4 class="text-xl font-bold text-yellow-600">PENDING REVIEW</h4>
-                        <p class="text-xs text-gray-400 mt-2">Our team is verifying your data. Please check back in 24 hours.</p>
+                        <div class="w-20 h-20 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-6"><i class="fas fa-clock text-3xl"></i></div>
+                        <h4 class="text-2xl font-black text-yellow-600 uppercase tracking-tight">Pending Review</h4>
+                        <p class="text-sm text-gray-500 mt-3 leading-relaxed">Our team is currently verifying your documentation. Please check back in 24 hours.</p>
+                        
                     <?php elseif ($stat == 'Approved'): ?>
-                        <div class="w-16 h-16 bg-green-100 text-primary-green rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-check-circle text-2xl"></i></div>
-                        <h4 class="text-xl font-bold text-primary-green">APPROVED!</h4>
-                        <p class="text-xs text-gray-600 mt-4 leading-relaxed">Visit Ikaze House, 2nd Floor to finalize your loan.</p>
+                        <div class="w-20 h-20 bg-green-100 text-primary-green rounded-full flex items-center justify-center mx-auto mb-6"><i class="fas fa-check-circle text-3xl"></i></div>
+                        <h4 class="text-2xl font-black text-primary-green uppercase tracking-tight">Application Approved!</h4>
+                        <div class="mt-6 p-6 bg-green-50 rounded-2xl border border-green-100 text-green-800 shadow-sm">
+                            <p class="font-black flex items-center justify-center gap-2 mb-2"><i class="fas fa-bullhorn rotate-[-20deg]"></i> CONGRATULATIONS!</p>
+                            <p class="text-xs leading-relaxed font-bold">Your application is approved. Visit Ikaze House, 2nd Floor or call <strong>+250 796 880 272</strong> to finalize.</p>
+                        </div>
+
                     <?php elseif ($stat == 'Action Required'): ?>
-                        <div class="w-16 h-16 bg-blue-100 text-primary-blue rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-exclamation-triangle text-2xl"></i></div>
-                        <h4 class="text-xl font-bold text-primary-blue">ACTION REQUIRED</h4>
-                        <p class="text-xs text-gray-500 mt-2 font-bold"><?php echo htmlspecialchars($found_customer['admin_note'] ?: 'Some documents need correction.'); ?></p>
+                        <div class="w-20 h-20 bg-blue-100 text-primary-blue rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse"><i class="fas fa-exclamation-triangle text-3xl"></i></div>
+                        <h4 class="text-2xl font-black text-primary-blue uppercase tracking-tight">Correction Required</h4>
+                        <div class="mt-3 p-4 bg-blue-50 rounded-2xl border border-blue-100 mb-8">
+                            <p class="text-[10px] font-black text-primary-blue uppercase mb-1 flex items-center justify-center gap-2"><i class="fas fa-info-circle"></i> Admin Instructions:</p>
+                            <p class="text-sm text-blue-900 font-bold"><?php echo htmlspecialchars($found_customer['admin_note'] ?: 'Please update the following fields.'); ?></p>
+                        </div>
                         
                         <!-- Correction Form -->
-                        <div class="mt-8 text-left border-t pt-6">
-                            <form action="" method="POST" enctype="multipart/form-data" class="space-y-4">
+                        <div class="mt-8 text-left border-t border-gray-200 pt-8">
+                            <form action="" method="POST" enctype="multipart/form-data" class="space-y-6">
                                 <input type="hidden" name="customer_id" value="<?php echo $found_customer['customer_id']; ?>">
                                 <input type="hidden" name="flagged_fields" value="<?php echo $found_customer['correction_fields']; ?>">
                                 <?php 
                                 $flagged = explode(',', $found_customer['correction_fields']);
                                 $field_labels = [
                                     'customer_name' => 'Full Name', 'id_number' => 'National ID', 'phone' => 'Phone Number',
-                                    'email' => 'Email', 'doc_id' => 'ID Copy', 'doc_contract' => 'Work Contract',
-                                    'doc_statement' => 'Bank Statement', 'doc_payslip' => 'Payslip', 
-                                    'doc_marital' => 'Marital Cert.', 'doc_rdb' => 'RDB Cert.'
+                                    'email' => 'Email', 'doc_id' => 'National ID Copy', 'doc_contract' => 'Work Contract',
+                                    'doc_statement' => 'Bank Statement', 'doc_payslip' => 'Latest Payslip', 
+                                    'doc_marital' => 'Marital Status Cert.', 'doc_rdb' => 'RDB Certificate'
                                 ];
                                 foreach($flagged as $f): 
                                     if(empty($f)) continue;
                                     $label = $field_labels[$f] ?? $f;
                                 ?>
-                                    <div class="space-y-1">
-                                        <label class="text-[10px] font-black uppercase text-gray-400 pl-1"><?php echo $label; ?></label>
+                                    <div class="space-y-2">
+                                        <label class="text-[11px] font-black uppercase text-gray-400 pl-1 tracking-wider"><?php echo $label; ?> *</label>
                                         <?php if(strpos($f, 'doc_') === 0): ?>
-                                            <input type="file" name="<?php echo $f; ?>" required class="w-full text-xs bg-white p-2 rounded-xl border border-dashed">
+                                            <input type="file" name="<?php echo $f; ?>" required class="w-full text-xs bg-white p-4 rounded-2xl border-2 border-dashed border-gray-200 focus:border-primary-blue outline-none transition-colors">
                                         <?php else: ?>
-                                            <input type="text" name="<?php echo $f; ?>" required class="w-full text-xs bg-white p-3 rounded-xl border" value="<?php echo htmlspecialchars($found_customer[$f]); ?>">
+                                            <input type="text" name="<?php echo $f; ?>" required class="w-full text-sm bg-white p-4 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-primary-blue outline-none transition-all" value="<?php echo htmlspecialchars($found_customer[$f]); ?>">
                                         <?php endif; ?>
                                     </div>
                                 <?php endforeach; ?>
-                                <button type="submit" name="submit_correction" class="w-full bg-primary-blue text-white py-3 rounded-xl font-bold text-xs shadow-lg hover:bg-blue-800">RESUBMIT UPDATES</button>
+                                <button type="submit" name="submit_correction" class="w-full bg-primary-blue hover:bg-blue-800 text-white py-4 rounded-2xl font-black text-sm shadow-xl transition-all transform hover:scale-[1.02]">
+                                    <i class="fas fa-paper-plane me-2"></i> RESUBMIT FOR REVIEW
+                                </button>
                             </form>
                         </div>
+
                     <?php else: ?>
-                        <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-times-circle text-2xl"></i></div>
-                        <h4 class="text-xl font-bold text-red-600">APPLICATION REJECTED</h4>
-                        <div class="mt-4 p-4 bg-red-50 rounded-2xl border border-red-100 mb-6">
+                        <div class="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6"><i class="fas fa-times-circle text-3xl"></i></div>
+                        <h4 class="text-2xl font-black text-red-600 uppercase tracking-tight">Application Rejected</h4>
+                        <div class="mt-4 p-5 bg-red-50 rounded-2xl border border-red-100 mb-8 shadow-sm">
                             <p class="text-[10px] font-black text-red-400 uppercase mb-1">Reason for Rejection:</p>
-                            <p class="text-xs text-red-700 font-bold"><?php echo htmlspecialchars($found_customer['rejection_reason'] ?: 'Requirements not met.'); ?></p>
+                            <p class="text-sm text-red-700 font-bold"><?php echo htmlspecialchars($found_customer['rejection_reason'] ?: 'Requirements not met.'); ?></p>
                         </div>
-                        <a href="apply.php?reapply=true" class="inline-block bg-primary-blue text-white px-8 py-3 rounded-xl font-bold text-xs shadow-xl">START NEW APPLICATION</a>
+                        <a href="apply.php?reapply=true" class="inline-flex items-center gap-3 bg-primary-blue hover:bg-blue-800 text-white px-10 py-4 rounded-2xl font-black text-sm shadow-2xl transition-all transform hover:scale-[1.02]">
+                           <i class="fas fa-redo-alt"></i> START NEW APPLICATION
+                        </a>
                     <?php endif; ?>
                 </div>
-                <div class="mt-10"><a href="apply.php" class="text-gray-400 text-xs font-bold hover:text-primary-blue"><i class="fas fa-sign-out-alt"></i> Logout View</a></div>
+                <div class="mt-12">
+                    <a href="apply.php" class="text-gray-400 text-xs font-black hover:text-primary-blue flex items-center justify-center gap-2 transition-colors">
+                        <i class="fas fa-sign-out-alt"></i> CLOSE DASHBOARD
+                    </a>
+                </div>
             </div>
 
         <?php elseif ($success === "updated"): ?>
-            <div class="bg-white rounded-[2.5rem] shadow-2xl p-16 text-center">
-                <div class="w-20 h-20 bg-blue-100 text-primary-blue rounded-full flex items-center justify-center mx-auto mb-6"><i class="fas fa-check text-3xl"></i></div>
-                <h3 class="text-2xl font-black mb-2">Correction Sent!</h3>
-                <p class="text-gray-400 text-sm">Your updates have been received. We will review them shortly.</p>
-                <div class="mt-8"><a href="index.php" class="bg-primary-blue text-white px-10 py-3 rounded-xl font-bold">Back to Home</a></div>
+            <div class="bg-white rounded-[3rem] shadow-2xl p-16 text-center animate-[fadeIn_0.5s_ease-out]">
+                <div class="w-24 h-24 bg-blue-100 text-primary-blue rounded-full flex items-center justify-center mx-auto mb-8"><i class="fas fa-check text-4xl"></i></div>
+                <h3 class="text-3xl font-black text-gray-800 mb-3">Correction Sent!</h3>
+                <p class="text-gray-500 text-sm max-w-sm mx-auto leading-relaxed">Your updates have been received. Our team will re-prioritize your application immediately.</p>
+                <div class="mt-10 flex flex-col gap-4">
+                    <a href="index.php" class="bg-primary-blue text-white px-12 py-4 rounded-2xl font-black shadow-xl hover:bg-blue-800 transition-all">Back to Home</a>
+                    <a href="apply.php" class="text-gray-400 font-bold text-xs">View another status</a>
+                </div>
             </div>
 
         <?php elseif ($success === "created"): ?>
-            <div class="bg-white rounded-[2.5rem] shadow-2xl p-16 text-center">
-                <div class="w-20 h-20 bg-green-100 text-primary-green rounded-full flex items-center justify-center mx-auto mb-6"><i class="fas fa-check text-3xl"></i></div>
-                <h3 class="text-2xl font-black mb-2">Application Received!</h3>
-                <p class="text-gray-400 text-sm">Track your progress using your email on this page.</p>
-                <div class="mt-8"><a href="apply.php?track_email=<?php echo $email; ?>" class="bg-primary-green text-white px-10 py-3 rounded-xl font-bold">Track Status</a></div>
+            <div class="bg-white rounded-[3rem] shadow-2xl p-16 text-center animate-[fadeIn_0.5s_ease-out]">
+                <div class="w-24 h-24 bg-green-100 text-primary-green rounded-full flex items-center justify-center mx-auto mb-8"><i class="fas fa-check text-4xl"></i></div>
+                <h3 class="text-3xl font-black text-gray-800 mb-3">Application Received!</h3>
+                <p class="text-gray-500 text-sm max-w-sm mx-auto leading-relaxed">Your application has been submitted successfully. Track your progress below.</p>
+                <div class="mt-10">
+                    <a href="apply.php?track_email=<?php echo urlencode($email); ?>" class="inline-block bg-primary-green text-white px-12 py-4 rounded-2xl font-black shadow-xl hover:bg-green-600 transition-all">TRACK MY LOAN</a>
+                </div>
             </div>
 
         <?php else: ?>
-            <div class="bg-white rounded-[2.5rem] shadow-2xl p-8 md:p-12 relative overflow-hidden">
-                <div class="text-center mb-10"><h1 class="text-3xl font-black text-primary-blue">Loan Application</h1></div>
-                <?php if ($error): ?><div class="bg-red-50 text-red-600 p-4 rounded-2xl mb-6 text-xs text-center border border-red-100 font-bold"><?php echo $error; ?></div><?php endif; ?>
+            <!-- MAIN APPLICATION FORM -->
+            <div id="form-container" class="bg-white rounded-[3rem] shadow-2xl p-10 md:p-14 relative overflow-hidden animate-[fadeIn_0.5s_ease-out]">
+                <div class="text-center mb-12">
+                    <h1 class="text-4xl font-black text-primary-blue mb-2 tracking-tighter">Loan Application</h1>
+                    <p class="text-gray-400 text-sm font-bold">Join Capital Bridge Finance & Empower your future.</p>
+                </div>
+
+                <?php if ($error): ?>
+                    <div class="bg-red-50 text-red-600 p-5 rounded-2xl mb-8 text-xs text-center border border-red-100 font-bold flex items-center justify-center gap-3">
+                        <i class="fas fa-exclamation-triangle"></i> <?php echo $error; ?>
+                    </div>
+                <?php endif; ?>
                 
-                <form id="loanForm" method="POST" enctype="multipart/form-data" class="space-y-6">
+                <form id="loanForm" method="POST" enctype="multipart/form-data" class="space-y-8">
                     <input type="hidden" name="submit_application" value="1">
-                    <!-- Steps logic same as before but minimalized for implementation -->
-                    <div id="step-1" class="form-step space-y-6">
-                        <div class="bg-blue-50 p-6 rounded-[2rem] mb-8">
-                            <label class="block text-xs font-black text-primary-blue mb-4 text-center">CHOOSE LOAN TYPE</label>
-                            <div class="grid grid-cols-2 gap-4">
-                                <label class="cursor-pointer">
+                    
+                    <!-- STEP 1: LOAN TYPE & BASIC INFO -->
+                    <div id="step-1" class="form-step space-y-8">
+                        <div class="bg-blue-50/50 p-8 rounded-[2.5rem] border border-blue-50">
+                            <label class="block text-[11px] font-black text-primary-blue mb-6 text-center tracking-widest uppercase">CHOOSE YOUR LOAN CATEGORY</label>
+                            <div class="grid grid-cols-2 gap-6">
+                                <label class="cursor-pointer group">
                                     <input type="radio" name="loan_type" value="Salary" required class="hidden peer" onchange="updateDocFields()">
-                                    <div class="bg-white border-2 border-transparent peer-checked:border-primary-green p-4 rounded-2xl text-center"><span class="text-xs font-black">SALARY</span></div>
+                                    <div class="bg-white border-2 border-gray-100 peer-checked:border-primary-green p-6 rounded-3xl text-center transition-all shadow-sm group-hover:shadow-md">
+                                        <div class="w-12 h-12 bg-green-50 text-primary-green rounded-2xl flex items-center justify-center mx-auto mb-3 transition-colors peer-checked:bg-primary-green peer-checked:text-white">
+                                            <i class="fas fa-id-card text-xl"></i>
+                                        </div>
+                                        <span class="block text-xs font-black uppercase text-gray-700 tracking-tight">Salary Loan</span>
+                                    </div>
                                 </label>
-                                <label class="cursor-pointer">
+                                <label class="cursor-pointer group">
                                     <input type="radio" name="loan_type" value="Business" required class="hidden peer" onchange="updateDocFields()">
-                                    <div class="bg-white border-2 border-transparent peer-checked:border-primary-blue p-4 rounded-2xl text-center"><span class="text-xs font-black">BUSINESS</span></div>
+                                    <div class="bg-white border-2 border-gray-100 peer-checked:border-primary-blue p-6 rounded-3xl text-center transition-all shadow-sm group-hover:shadow-md">
+                                        <div class="w-12 h-12 bg-blue-50 text-primary-blue rounded-2xl flex items-center justify-center mx-auto mb-3 transition-colors peer-checked:bg-primary-blue peer-checked:text-white">
+                                            <i class="fas fa-store text-xl"></i>
+                                        </div>
+                                        <span class="block text-xs font-black uppercase text-gray-700 tracking-tight">Business Loan</span>
+                                    </div>
                                 </label>
                             </div>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <input type="text" name="customer_name" required placeholder="Full Name" class="p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue">
-                            <input type="email" name="email" required placeholder="Email Address" class="p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue">
-                            <input type="tel" name="phone" required placeholder="Phone Number" class="p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue">
-                            <input type="text" name="nationalId" required placeholder="National ID" class="p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue">
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Full Name</label>
+                                <input type="text" name="customer_name" required placeholder="John Doe" class="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue transition-all">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Email Address</label>
+                                <input type="email" name="email" required placeholder="example@mail.com" class="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue transition-all">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Phone Number</label>
+                                <input type="tel" name="phone" required placeholder="+250 7..." class="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue transition-all">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">National ID</label>
+                                <input type="text" name="nationalId" required placeholder="16-digit number" class="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue transition-all">
+                            </div>
                         </div>
-                        <button type="button" onclick="nextPrev(1)" class="w-full bg-primary-blue text-white py-4 rounded-2xl font-black shadow-xl">CONTINUE</button>
+
+                        <button type="button" onclick="nextPrev(1)" class="w-full bg-primary-blue text-white py-5 rounded-2xl font-black shadow-2xl hover:bg-blue-800 transition-all flex items-center justify-center gap-3 group">
+                            CONTINUE TO PERSONAL DETAILS <i class="fas fa-arrow-right text-xs transition-transform group-hover:translate-x-1"></i>
+                        </button>
                     </div>
 
-                    <div id="step-2" class="form-step space-y-6 hidden">
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <input type="text" name="birth_place" required placeholder="Birth Place" class="p-3 bg-gray-50 rounded-xl text-xs border">
-                            <select name="gender" class="p-3 bg-gray-50 rounded-xl text-xs border"><option value="male">Male</option><option value="female">Female</option></select>
-                            <input type="date" name="dob" required class="p-3 bg-gray-50 rounded-xl text-xs border">
+                    <!-- STEP 2: FAMILY & MARITAL -->
+                    <div id="step-2" class="form-step space-y-8 hidden">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Birth Place</label><input type="text" name="birth_place" required class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none focus:bg-white"></div>
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Gender</label><select name="gender" class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none focus:bg-white"><option value="male">Male</option><option value="female">Female</option></select></div>
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Date of Birth</label><input type="date" name="dob" required class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none focus:bg-white"></div>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <input type="text" name="father_name" required placeholder="Father's Name" class="p-3 bg-gray-50 rounded-xl text-xs border">
-                            <input type="text" name="mother_name" required placeholder="Mother's Name" class="p-3 bg-gray-50 rounded-xl text-xs border">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Father's Name</label><input type="text" name="father_name" required class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none focus:bg-white"></div>
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Mother's Name</label><input type="text" name="mother_name" required class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none focus:bg-white"></div>
                         </div>
-                        <select name="marriage_type" id="marriage_type" onchange="toggleSpouseFields()" class="w-full p-3 bg-gray-50 rounded-xl text-xs border">
-                            <option value="Single">Single</option><option value="Ivanga mutungo">Ivanga mutungo</option><option value="Ivangura mutungo">Ivangura mutungo</option><option value="Muhahano">Muhahano</option>
-                        </select>
-                        <div id="spouse_fields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <input type="text" name="spouse" placeholder="Spouse Name" class="p-3 bg-gray-50 rounded-xl text-xs border">
-                            <input type="tel" name="spouse_phone" placeholder="Spouse Phone" class="p-3 bg-gray-50 rounded-xl text-xs border">
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Marriage Status</label>
+                            <select name="marriage_type" id="marriage_type" onchange="toggleSpouseFields()" class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none focus:bg-white">
+                                <option value="Single">Single</option><option value="Ivanga mutungo">Ivanga mutungo</option><option value="Ivangura mutungo">Ivangura mutungo</option><option value="Muhahano">Muhahano</option>
+                            </select>
                         </div>
-                        <div class="flex gap-4"><button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 p-4 rounded-2xl font-bold">BACK</button><button type="button" onclick="nextPrev(1)" class="w-2/3 bg-primary-blue text-white p-4 rounded-2xl font-bold">NEXT</button></div>
+                        <div id="spouse_fields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Spouse Name</label><input type="text" name="spouse" class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none"></div>
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Spouse Phone</label><input type="tel" name="spouse_phone" class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none"></div>
+                        </div>
+                        <div class="flex gap-4">
+                            <button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 p-5 rounded-2xl font-black text-gray-400 transition-colors hover:bg-gray-200">BACK</button>
+                            <button type="button" onclick="nextPrev(1)" class="w-2/3 bg-primary-blue text-white p-5 rounded-2xl font-black shadow-xl hover:bg-blue-800 transition-all">NEXT: PROFESSIONAL INFO</button>
+                        </div>
                     </div>
 
-                    <div id="step-3" class="form-step space-y-6 hidden">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <input type="text" name="occupation" required placeholder="Occupation" class="p-3 bg-gray-50 rounded-xl text-xs border">
-                            <input type="text" name="account_number" required placeholder="Bank Account Number" class="p-3 bg-gray-50 rounded-xl text-xs border">
+                    <!-- STEP 3: OCCUPATION & PROJECT -->
+                    <div id="step-3" class="form-step space-y-8 hidden">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Current Occupation</label><input type="text" name="occupation" required class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none"></div>
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Bank Account Number</label><input type="text" name="account_number" required class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none"></div>
                         </div>
-                        <input type="text" name="address" required placeholder="Home Address" class="p-3 bg-gray-50 rounded-xl text-xs border w-full">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <input type="text" name="project" required placeholder="Project Name" class="p-3 bg-gray-50 rounded-xl text-xs border">
-                            <input type="text" name="location" required placeholder="Location" class="p-3 bg-gray-50 rounded-xl text-xs border">
-                            <input type="text" name="project_location" required placeholder="Project Location" class="p-3 bg-gray-50 rounded-xl text-xs border">
-                            <input type="text" name="caution_location" required placeholder="Caution Location" class="p-3 bg-gray-50 rounded-xl text-xs border">
+                        <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Residential Address</label><input type="text" name="address" required placeholder="District, Sector, Cell, Village" class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none"></div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Project Name</label><input type="text" name="project" required class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none"></div>
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Primary Location</label><input type="text" name="location" required class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none"></div>
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Project Location</label><input type="text" name="project_location" required class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none focus:bg-white"></div>
+                            <div class="space-y-1"><label class="text-[10px] font-black uppercase text-gray-400 pl-4">Caution Location</label><input type="text" name="caution_location" required class="w-full p-4 bg-gray-50 rounded-2xl border text-sm outline-none focus:bg-white"></div>
                         </div>
-                        <div class="flex gap-4"><button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 p-4 rounded-2xl font-bold">BACK</button><button type="button" onclick="nextPrev(1)" class="w-2/3 bg-primary-blue text-white p-4 rounded-2xl font-bold">NEXT</button></div>
+                        <div class="flex gap-4">
+                            <button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 p-5 rounded-2xl font-black text-gray-400">BACK</button>
+                            <button type="button" onclick="nextPrev(1)" class="w-2/3 bg-primary-blue text-white p-5 rounded-2xl font-black shadow-xl">NEXT: UPLOAD DOCUMENTS</button>
+                        </div>
                     </div>
 
-                    <div id="step-4" class="form-step space-y-6 hidden">
-                        <div class="bg-primary-blue text-white p-6 rounded-3xl mb-4 text-center"><h4 class="text-xs font-black">UPLOAD DOCUMENTS</h4></div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="space-y-1"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">National ID *</label><input type="file" name="doc_id" required accept=".pdf,.jpg,.jpeg,.png" class="w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
-                            <div class="space-y-1"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">Marital Cert *</label><input type="file" name="doc_marital" required accept=".pdf,.jpg,.jpeg,.png" class="w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
-                            <div class="space-y-1 doc-salary"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">Work Contract *</label><input type="file" name="doc_contract" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
-                            <div class="space-y-1 doc-salary"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">Bank Statement *</label><input type="file" name="doc_statement" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
-                            <div class="space-y-1 doc-salary"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">Latest Payslip *</label><input type="file" name="doc_payslip" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
-                            <div class="space-y-1 doc-business hidden"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">RDB Certificate *</label><input type="file" name="doc_rdb" accept=".pdf,.jpg,.jpeg,.png" class="business-req w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
-                            <div class="space-y-1 doc-business hidden"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">Bank/Momo Statement *</label><input type="file" name="doc_statement_alt" accept=".pdf,.jpg,.jpeg,.png" class="business-req w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
+                    <!-- STEP 4: DOCUMENT UPLOADS -->
+                    <div id="step-4" class="form-step space-y-8 hidden">
+                        <div class="bg-primary-blue text-white p-8 rounded-[2.5rem] mb-6 shadow-lg">
+                            <h4 class="text-xs font-black uppercase flex items-center gap-3"><i class="fas fa-file-upload text-xl"></i> Secure Document Upload</h4>
+                            <p class="text-[10px] text-blue-200 mt-2 font-bold uppercase tracking-widest">Only PDF, JPG, and PNG files are accepted.</p>
                         </div>
-                        <div class="flex gap-4"><button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 p-4 rounded-2xl font-bold">BACK</button><button type="submit" class="w-2/3 bg-primary-green text-white p-4 rounded-2xl font-black shadow-xl">SUBMIT NOW</button></div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div class="space-y-2"><label class="text-[11px] font-black text-gray-400 pl-4 uppercase tracking-tighter">National ID *</label><input type="file" name="doc_id" required accept=".pdf,.jpg,.jpeg,.png" class="w-full text-[11px] bg-gray-50 p-4 rounded-3xl border-2 border-dashed border-gray-100 hover:border-primary-blue transition-colors"></div>
+                            <div class="space-y-2"><label class="text-[11px] font-black text-gray-400 pl-4 uppercase tracking-tighter">Marital Status Cert *</label><input type="file" name="doc_marital" required accept=".pdf,.jpg,.jpeg,.png" class="w-full text-[11px] bg-gray-50 p-4 rounded-3xl border-2 border-dashed border-gray-100 hover:border-primary-blue transition-colors"></div>
+                            
+                            <!-- DIVS FOR LOAN TYPE -->
+                            <div class="space-y-2 doc-salary"><label class="text-[11px] font-black text-gray-400 pl-4 uppercase tracking-tighter">Work Contract *</label><input type="file" name="doc_contract" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full text-[11px] bg-gray-100 p-4 rounded-3xl border-2 border-dashed"></div>
+                            <div class="space-y-2 doc-salary"><label class="text-[11px] font-black text-gray-400 pl-4 uppercase tracking-tighter">Bank Statement *</label><input type="file" name="doc_statement" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full text-[11px] bg-gray-100 p-4 rounded-3xl border-2 border-dashed"></div>
+                            <div class="space-y-2 doc-salary"><label class="text-[11px] font-black text-gray-400 pl-4 uppercase tracking-tighter">Latest Payslip *</label><input type="file" name="doc_payslip" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full text-[11px] bg-gray-100 p-4 rounded-3xl border-2 border-dashed"></div>
+                            
+                            <div class="space-y-2 doc-business hidden"><label class="text-[11px] font-black text-gray-400 pl-4 uppercase tracking-tighter">RDB Certificate *</label><input type="file" name="doc_rdb" accept=".pdf,.jpg,.jpeg,.png" class="business-req w-full text-[11px] bg-gray-100 p-4 rounded-3xl border-2 border-dashed"></div>
+                            <div class="space-y-2 doc-business hidden"><label class="text-[11px] font-black text-gray-400 pl-4 uppercase tracking-tighter">Proof of Business Income *</label><input type="file" name="doc_statement_alt" accept=".pdf,.jpg,.jpeg,.png" class="business-req w-full text-[11px] bg-gray-100 p-4 rounded-3xl border-2 border-dashed"></div>
+                        </div>
+                        <div class="flex gap-4 mt-12 pb-6">
+                            <button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 p-6 rounded-3xl font-black text-gray-400">BACK</button>
+                            <button type="submit" class="w-2/3 bg-primary-green text-white p-6 rounded-3xl font-black shadow-2xl transition-all hover:scale-[1.02] active:scale-95">SUBMIT FINAL APPLICATION</button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -344,8 +424,12 @@ function validateStep() {
     const activeStep = document.getElementById("step-" + currentStep);
     const inputs = activeStep.querySelectorAll("input[required], select[required]");
     for (let input of inputs) {
-        if (!input.value) { input.classList.add("border-red-500"); return false; }
-        input.classList.remove("border-red-500");
+        if (!input.value) { 
+            input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            input.classList.add("border-red-500", "ring-2", "ring-red-100"); 
+            return false; 
+        }
+        input.classList.remove("border-red-500", "ring-2", "ring-red-100");
     }
     return true;
 }
@@ -361,17 +445,25 @@ function updateDocFields() {
     const type = document.querySelector('input[name="loan_type"]:checked').value;
     const salaryDocs = document.querySelectorAll('.doc-salary');
     const businessDocs = document.querySelectorAll('.doc-business');
+    const salaryReqs = document.querySelectorAll('.salary-req');
+    const businessReqs = document.querySelectorAll('.business-req');
+
     if (type === 'Salary') {
         salaryDocs.forEach(d => d.classList.remove('hidden'));
         businessDocs.forEach(d => d.classList.add('hidden'));
+        salaryReqs.forEach(r => r.required = true);
+        businessReqs.forEach(r => r.required = false);
     } else {
         salaryDocs.forEach(d => d.classList.add('hidden'));
         businessDocs.forEach(d => d.classList.remove('hidden'));
+        salaryReqs.forEach(r => r.required = false);
+        businessReqs.forEach(r => r.required = true);
     }
 }
 </script>
 
 <style>
+@keyframes fadeIn { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
 .gradient-blue { background: linear-gradient(135deg, #0f172a 0%, #1e40af 100%); }
 .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }

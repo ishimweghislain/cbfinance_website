@@ -27,11 +27,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
         $email = $conn->real_escape_string($_POST['email']);
         
         // Check if email already exists
-        $check = $conn->query("SELECT customer_id FROM customers WHERE email = '$email'");
+        $check = $conn->query("SELECT customer_id, status FROM customers WHERE email = '$email'");
         if ($check && $check->num_rows > 0) {
-            $already_applied = true;
-            $error = "You have already applied. Please enter your email above to track your status.";
-        } else {
+            $existing = $check->fetch_assoc();
+            if ($existing['status'] !== 'Rejected') {
+                $already_applied = true;
+                $error = "You have already applied. Please enter your email above to track your status.";
+            } else {
+                // It was rejected, so we'll allow re-submission by removing the rejected record
+                $conn->query("DELETE FROM customers WHERE customer_id = " . $existing['customer_id']);
+                // Code will now proceed to insert a new application
+            }
+        }
+        
+        if (!$already_applied) {
             // Process basic fields
             $customer_name = $conn->real_escape_string($_POST['customer_name']);
             $phone = $conn->real_escape_string($_POST['phone']);
@@ -62,19 +71,30 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
             $doc_paths = [];
             $required_docs = ($loan_type == 'Salary') ? 
                 ['doc_id', 'doc_contract', 'doc_statement', 'doc_payslip'] : 
-                ['doc_id', 'doc_rdb', 'doc_statement'];
+                ['doc_id', 'doc_rdb', 'doc_statement_alt'];
             
             if ($marriage_type !== 'Single') $required_docs[] = 'doc_marital';
 
+            $allowed_exts = ['pdf', 'jpg', 'jpeg', 'png'];
             foreach ($required_docs as $doc_field) {
                 if (isset($_FILES[$doc_field]) && $_FILES[$doc_field]['error'] == 0) {
-                    $ext = pathinfo($_FILES[$doc_field]['name'], PATHINFO_EXTENSION);
+                    $ext = strtolower(pathinfo($_FILES[$doc_field]['name'], PATHINFO_EXTENSION));
+                    if (!in_array($ext, $allowed_exts)) {
+                        $error = "Error: Only PDF, JPG, and PNG files are allowed for uploads.";
+                        $already_applied = true; // Block submission
+                        break;
+                    }
                     $filename = $doc_field . "_" . time() . "_" . mt_rand(100, 999) . "." . $ext;
                     move_uploaded_file($_FILES[$doc_field]['tmp_name'], $upload_dir . $filename);
                     $doc_paths[$doc_field] = $upload_dir . $filename;
                 } else {
                     $doc_paths[$doc_field] = null;
                 }
+            }
+
+            // Ensure both salary and business statements go into the same db column
+            if (isset($doc_paths['doc_statement_alt'])) {
+                $doc_paths['doc_statement'] = $doc_paths['doc_statement_alt'];
             }
 
             // Fill missing doc paths for DB consistency
@@ -105,7 +125,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
                 $error = "Error: " . $conn->error;
             }
         }
-        $conn->close();
     }
 }
 ?>
@@ -295,37 +314,37 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
                             <!-- Field: ID -->
                             <div class="space-y-2">
                                 <label class="text-[10px] font-bold text-gray-500 uppercase">Copy of ID (Pic/PDF) *</label>
-                                <input type="file" name="doc_id" required class="w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
+                                <input type="file" name="doc_id" required accept=".pdf,.jpg,.jpeg,.png" class="w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
                             </div>
 
                             <!-- Field: Marital (Conditional) -->
                             <div class="space-y-2 marital-doc hidden">
                                 <label class="text-[10px] font-bold text-gray-500 uppercase">Marital Status Cert. *</label>
-                                <input type="file" name="doc_marital" class="w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
+                                <input type="file" name="doc_marital" accept=".pdf,.jpg,.jpeg,.png" class="w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
                             </div>
 
                             <!-- SALARY ONLY -->
                             <div class="space-y-2 doc-salary">
                                 <label class="text-[10px] font-bold text-gray-500 uppercase">Work Contract (PDF/Img) *</label>
-                                <input type="file" name="doc_contract" class="salary-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
+                                <input type="file" name="doc_contract" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
                             </div>
                             <div class="space-y-2 doc-salary">
                                 <label class="text-[10px] font-bold text-gray-500 uppercase">Bank Statement *</label>
-                                <input type="file" name="doc_statement" class="salary-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
+                                <input type="file" name="doc_statement" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
                             </div>
                             <div class="space-y-2 doc-salary">
                                 <label class="text-[10px] font-bold text-gray-500 uppercase">Latest Payslip *</label>
-                                <input type="file" name="doc_payslip" class="salary-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
+                                <input type="file" name="doc_payslip" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
                             </div>
 
                             <!-- BUSINESS ONLY -->
                             <div class="space-y-2 doc-business hidden">
                                 <label class="text-[10px] font-bold text-gray-500 uppercase">RDB Certificate *</label>
-                                <input type="file" name="doc_rdb" class="business-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
+                                <input type="file" name="doc_rdb" accept=".pdf,.jpg,.jpeg,.png" class="business-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
                             </div>
                             <div class="space-y-2 doc-business hidden">
                                 <label class="text-[10px] font-bold text-gray-500 uppercase">Bank/Momo Statement *</label>
-                                <input type="file" name="doc_statement_alt" class="business-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
+                                <input type="file" name="doc_statement_alt" accept=".pdf,.jpg,.jpeg,.png" class="business-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
                             </div>
                         </div>
 
@@ -355,14 +374,25 @@ function nextPrev(n) {
 
 function validateStep() {
     const activeStep = document.getElementById("step-" + currentStep);
-    const inputs = activeStep.querySelectorAll("input[required], select[required], radio[required]");
+    const inputs = activeStep.querySelectorAll("input[required], select[required]");
+    
     for (let input of inputs) {
+        // Validation for file type
+        if (input.type === 'file' && input.files.length > 0) {
+            const ext = input.files[0].name.split('.').pop().toLowerCase();
+            const allowed = ['pdf', 'jpg', 'jpeg', 'png'];
+            if (!allowed.includes(ext)) {
+                alert("Error: Only PDF, JPG, and PNG files are allowed.");
+                return false;
+            }
+        }
+        
         if (input.type === 'radio') {
             const rads = activeStep.querySelectorAll(`input[name="${input.name}"]`);
             let checked = false;
             for(let r of rads) if(r.checked) checked = true;
             if(!checked) return false;
-        } else if (!input.value) {
+        } else if (!input.value && input.type !== 'file') {
             input.classList.add("border-red-500");
             return false;
         }

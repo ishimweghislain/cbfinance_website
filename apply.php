@@ -7,30 +7,73 @@ $success = false;
 $error = "";
 $already_applied = false;
 
-// Handle Status Check / Login
-if (isset($_GET['track_email']) || isset($_GET['reapply'])) {
+// Handle Correction Submission
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_correction'])) {
     $conn = getWebsiteConnection();
-    $track_email = $conn->real_escape_string($_GET['track_email'] ?? '');
-    
-    if (isset($_GET['reapply'])) {
-        // If reapply is clicked, we just show the form directly (don't track)
-    } elseif ($track_email) {
-        $res = $conn->query("SELECT * FROM customers WHERE email = '$track_email' LIMIT 1");
-        if ($res && $res->num_rows > 0) {
-            $found_customer = $res->fetch_assoc();
-            $success = "found"; 
+    if ($conn) {
+        $cid = intval($_POST['customer_id']);
+        $flagged = explode(',', $_POST['flagged_fields'] ?? '');
+        $update_parts = [];
+        $upload_dir = "uploads/documents/";
+
+        foreach ($flagged as $field) {
+            if (empty($field)) continue;
+            
+            if (strpos($field, 'doc_') === 0) {
+                if (isset($_FILES[$field]) && $_FILES[$field]['error'] == 0) {
+                    $ext = strtolower(pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION));
+                    $filename = $field . "_" . time() . "_" . mt_rand(100, 999) . "." . $ext;
+                    move_uploaded_file($_FILES[$field]['tmp_name'], $upload_dir . $filename);
+                    $path = $upload_dir . $filename;
+                    $update_parts[] = "$field = '$path'";
+                }
+            } else {
+                if (isset($_POST[$field])) {
+                    $val = $conn->real_escape_string($_POST[$field]);
+                    $update_parts[] = "$field = '$val'";
+                }
+            }
+        }
+
+        if (!empty($update_parts)) {
+            $sql = "UPDATE customers SET " . implode(', ', $update_parts) . ", status = 'Pending', client_resubmitted = 1 WHERE customer_id = $cid";
+            if ($conn->query($sql)) {
+                $success = "updated";
+            } else {
+                $error = "Update failed: " . $conn->error;
+            }
         } else {
-            $error = "No application found with this email.";
+            $error = "No changes were submitted.";
         }
     }
 }
 
+// Handle Status Check / Login
+if (isset($_GET['track_email']) || isset($_GET['reapply'])) {
+    $conn = getWebsiteConnection();
+    if ($conn) {
+        $track_email = $conn->real_escape_string($_GET['track_email'] ?? '');
+        
+        if (isset($_GET['reapply'])) {
+            // Show form
+        } elseif ($track_email) {
+            $res = $conn->query("SELECT * FROM customers WHERE email = '$track_email' LIMIT 1");
+            if ($res && $res->num_rows > 0) {
+                $found_customer = $res->fetch_assoc();
+                $success = "found"; 
+            } else {
+                $error = "No application found with this email.";
+            }
+        }
+    }
+}
+
+// Handle New Application
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application'])) {
     $conn = getWebsiteConnection();
     if ($conn) {
         $email = $conn->real_escape_string($_POST['email']);
         
-        // Check if email already exists
         $check = $conn->query("SELECT customer_id, status FROM customers WHERE email = '$email'");
         if ($check && $check->num_rows > 0) {
             $existing = $check->fetch_assoc();
@@ -38,19 +81,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
                 $already_applied = true;
                 $error = "You have already applied. Please enter your email above to track your status.";
             } else {
-                // It was rejected, so we'll allow re-submission by removing the rejected record
                 $conn->query("DELETE FROM customers WHERE customer_id = " . $existing['customer_id']);
-                // Code will now proceed to insert a new application
             }
         }
         
         if (!$already_applied) {
-            // Process basic fields
             $customer_name = $conn->real_escape_string($_POST['customer_name']);
             $phone = $conn->real_escape_string($_POST['phone']);
             $id_number = $conn->real_escape_string($_POST['nationalId']);
             $loan_type = $conn->real_escape_string($_POST['loan_type']);
-            
             $dob = $conn->real_escape_string($_POST['dob']);
             $gender = ucfirst($conn->real_escape_string($_POST['gender']));
             $birth_place = $conn->real_escape_string($_POST['birth_place']);
@@ -68,45 +107,31 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
             $project_location = $conn->real_escape_string($_POST['project_location']);
             $caution_location = $conn->real_escape_string($_POST['caution_location']);
             
-            // File Upload Handling
             $upload_dir = "uploads/documents/";
             if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
             
             $doc_paths = [];
             $required_docs = ($loan_type == 'Salary') ? 
-                ['doc_id', 'doc_contract', 'doc_statement', 'doc_payslip'] : 
-                ['doc_id', 'doc_rdb', 'doc_statement_alt'];
-            
-            if ($marriage_type !== 'Single') $required_docs[] = 'doc_marital';
+                ['doc_id', 'doc_contract', 'doc_statement', 'doc_payslip', 'doc_marital'] : 
+                ['doc_id', 'doc_rdb', 'doc_statement_alt', 'doc_marital'];
 
             $allowed_exts = ['pdf', 'jpg', 'jpeg', 'png'];
             foreach ($required_docs as $doc_field) {
                 if (isset($_FILES[$doc_field]) && $_FILES[$doc_field]['error'] == 0) {
                     $ext = strtolower(pathinfo($_FILES[$doc_field]['name'], PATHINFO_EXTENSION));
-                    if (!in_array($ext, $allowed_exts)) {
-                        $error = "Error: Only PDF, JPG, and PNG files are allowed for uploads.";
-                        $already_applied = true; // Block submission
-                        break;
-                    }
+                    if (!in_array($ext, $allowed_exts)) { $error = "Invalid file type."; $already_applied = true; break; }
                     $filename = $doc_field . "_" . time() . "_" . mt_rand(100, 999) . "." . $ext;
                     move_uploaded_file($_FILES[$doc_field]['tmp_name'], $upload_dir . $filename);
                     $doc_paths[$doc_field] = $upload_dir . $filename;
-                } else {
-                    $doc_paths[$doc_field] = null;
                 }
             }
 
-            // Ensure both salary and business statements go into the same db column
-            if (isset($doc_paths['doc_statement_alt'])) {
-                $doc_paths['doc_statement'] = $doc_paths['doc_statement_alt'];
-            }
+            if (isset($doc_paths['doc_statement_alt'])) $doc_paths['doc_statement'] = $doc_paths['doc_statement_alt'];
 
-            // Fill missing doc paths for DB consistency
             $all_docs = ['doc_id', 'doc_contract', 'doc_statement', 'doc_payslip', 'doc_marital', 'doc_rdb'];
             foreach ($all_docs as $d) if (!isset($doc_paths[$d])) $doc_paths[$d] = null;
 
             $customer_code = "PEND-" . mt_rand(100000, 999999);
-            
             $sql = "INSERT INTO customers (
                 customer_code, customer_name, email, phone, id_number, loan_type, 
                 doc_id, doc_contract, doc_statement, doc_payslip, doc_marital, doc_rdb,
@@ -123,244 +148,180 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
                 0, 'Pending', 'Capital Bridge Finance'
             )";
 
-            if ($conn->query($sql)) {
-                $success = "created";
-            } else {
-                $error = "Error: " . $conn->error;
-            }
+            if ($conn->query($sql)) $success = "created";
+            else $error = "Error: " . $conn->error;
         }
     }
 }
 ?>
 
-<main class="min-h-screen py-12 px-4 sm:px-6 lg:px-8 gradient-blue">
+<main class="min-h-screen py-12 px-4 sm:px-6 lg:px-8 gradient-blue font-sans">
     <div class="max-w-4xl mx-auto">
-        <!-- Tracking / Login Bar -->
+        <!-- Tracking Bar -->
         <div class="mb-8 flex justify-end">
             <form action="" method="GET" class="flex items-center gap-2 bg-white/10 p-2 rounded-2xl backdrop-blur-md border border-white/20">
-                <span class="text-white text-xs font-bold hidden md:block pl-2">Track Application:</span>
-                <input type="email" name="track_email" placeholder="Enter your email" required class="bg-white rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:ring-2 focus:ring-primary-green outline-none min-w-[200px]">
-                <button type="submit" class="bg-primary-green hover:bg-green-600 text-white px-4 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
-                    <i class="fas fa-search"></i> Check
-                </button>
+                <input type="email" name="track_email" placeholder="Track application email" required class="bg-white rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:ring-2 focus:ring-primary-green outline-none min-w-[200px]">
+                <button type="submit" class="bg-primary-green hover:bg-green-600 text-white px-4 py-1.5 rounded-xl text-xs font-bold transition-all">Check Status</button>
             </form>
         </div>
 
         <?php if ($success === "found" && isset($found_customer)): ?>
-            <!-- CLIENT DASHBOARD VIEW -->
-            <div class="bg-white rounded-[2rem] shadow-2xl p-10 md:p-16 text-center animate-[fadeIn_0.5s_ease-out]">
-                <div class="mb-8">
-                    <h2 class="text-3xl font-black text-primary-heading">Hello, <?php echo explode(' ', $found_customer['customer_name'])[0]; ?>!</h2>
-                    <p class="text-gray-500">Here is the current state of your application.</p>
-                </div>
+            <div class="bg-white rounded-[2.5rem] shadow-2xl p-10 md:p-16 text-center">
+                <h2 class="text-3xl font-black text-gray-800 mb-2">Hello, <?php echo htmlspecialchars(explode(' ', $found_customer['customer_name'])[0]); ?></h2>
+                <p class="text-gray-400 mb-8">Application Status ID: <span class="text-primary-blue font-bold"><?php echo $found_customer['customer_code']; ?></span></p>
 
-                <div class="flex flex-col items-center justify-center p-8 bg-gray-50 rounded-3xl mb-10">
+                <div class="max-w-md mx-auto p-8 rounded-[2rem] bg-gray-50 border border-gray-100">
                     <?php 
                     $stat = $found_customer['status'];
                     if ($stat == 'Pending'): ?>
-                        <div class="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4"><i class="fas fa-clock text-2xl"></i></div>
-                        <h4 class="text-xl font-bold text-yellow-600 uppercase tracking-tighter">Pending Review</h4>
-                        <p class="text-xs text-gray-400 mt-2 max-w-sm">Our team is currently verifying your documents. This usually takes 24-48 hours. Please check back later.</p>
+                        <div class="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-clock text-2xl"></i></div>
+                        <h4 class="text-xl font-bold text-yellow-600">PENDING REVIEW</h4>
+                        <p class="text-xs text-gray-400 mt-2">Our team is verifying your data. Please check back in 24 hours.</p>
                     <?php elseif ($stat == 'Approved'): ?>
-                        <div class="w-16 h-16 bg-green-100 text-primary-green rounded-full flex items-center justify-center mb-4"><i class="fas fa-check-circle text-2xl"></i></div>
-                        <h4 class="text-xl font-bold text-primary-green uppercase tracking-tighter">Application Approved!</h4>
-                        <div class="mt-4 p-6 bg-green-50 rounded-2xl border border-green-100 text-green-800 text-center">
-                            <p class="font-bold flex items-center justify-center gap-2 mb-2"><i class="fas fa-bullhorn rotate-[-20deg]"></i> CONGRATULATIONS!</p>
-                            <p class="text-xs leading-relaxed">Your membership has been approved. Please <strong>visit our office</strong> at Ikaze House, 2nd Floor or <strong>call us at +250 796 880 272</strong> to finalize your loan processing.</p>
+                        <div class="w-16 h-16 bg-green-100 text-primary-green rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-check-circle text-2xl"></i></div>
+                        <h4 class="text-xl font-bold text-primary-green">APPROVED!</h4>
+                        <p class="text-xs text-gray-600 mt-4 leading-relaxed">Visit Ikaze House, 2nd Floor to finalize your loan.</p>
+                    <?php elseif ($stat == 'Action Required'): ?>
+                        <div class="w-16 h-16 bg-blue-100 text-primary-blue rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-exclamation-triangle text-2xl"></i></div>
+                        <h4 class="text-xl font-bold text-primary-blue">ACTION REQUIRED</h4>
+                        <p class="text-xs text-gray-500 mt-2 font-bold"><?php echo htmlspecialchars($found_customer['admin_note'] ?: 'Some documents need correction.'); ?></p>
+                        
+                        <!-- Correction Form -->
+                        <div class="mt-8 text-left border-t pt-6">
+                            <form action="" method="POST" enctype="multipart/form-data" class="space-y-4">
+                                <input type="hidden" name="customer_id" value="<?php echo $found_customer['customer_id']; ?>">
+                                <input type="hidden" name="flagged_fields" value="<?php echo $found_customer['correction_fields']; ?>">
+                                <?php 
+                                $flagged = explode(',', $found_customer['correction_fields']);
+                                $field_labels = [
+                                    'customer_name' => 'Full Name', 'id_number' => 'National ID', 'phone' => 'Phone Number',
+                                    'email' => 'Email', 'doc_id' => 'ID Copy', 'doc_contract' => 'Work Contract',
+                                    'doc_statement' => 'Bank Statement', 'doc_payslip' => 'Payslip', 
+                                    'doc_marital' => 'Marital Cert.', 'doc_rdb' => 'RDB Cert.'
+                                ];
+                                foreach($flagged as $f): 
+                                    if(empty($f)) continue;
+                                    $label = $field_labels[$f] ?? $f;
+                                ?>
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-black uppercase text-gray-400 pl-1"><?php echo $label; ?></label>
+                                        <?php if(strpos($f, 'doc_') === 0): ?>
+                                            <input type="file" name="<?php echo $f; ?>" required class="w-full text-xs bg-white p-2 rounded-xl border border-dashed">
+                                        <?php else: ?>
+                                            <input type="text" name="<?php echo $f; ?>" required class="w-full text-xs bg-white p-3 rounded-xl border" value="<?php echo htmlspecialchars($found_customer[$f]); ?>">
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+                                <button type="submit" name="submit_correction" class="w-full bg-primary-blue text-white py-3 rounded-xl font-bold text-xs shadow-lg hover:bg-blue-800">RESUBMIT UPDATES</button>
+                            </form>
                         </div>
                     <?php else: ?>
-                        <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4"><i class="fas fa-times-circle text-2xl"></i></div>
-                        <h4 class="text-xl font-bold text-red-600 uppercase tracking-tighter">Application Rejected</h4>
-                        <p class="text-xs text-gray-400 mt-2 max-w-sm text-center">Unfortunately, your application does not meet our current requirements. <strong>You are welcome to re-apply at any time</strong> with updated documentation.</p>
-                        <div class="mt-8">
-                            <a href="apply.php?reapply=true" class="bg-primary-blue text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-blue-800 transition-all flex items-center gap-3">
-                                <i class="fas fa-redo-alt"></i> RE-APPLY NOW
-                            </a>
+                        <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-times-circle text-2xl"></i></div>
+                        <h4 class="text-xl font-bold text-red-600">APPLICATION REJECTED</h4>
+                        <div class="mt-4 p-4 bg-red-50 rounded-2xl border border-red-100 mb-6">
+                            <p class="text-[10px] font-black text-red-400 uppercase mb-1">Reason for Rejection:</p>
+                            <p class="text-xs text-red-700 font-bold"><?php echo htmlspecialchars($found_customer['rejection_reason'] ?: 'Requirements not met.'); ?></p>
                         </div>
+                        <a href="apply.php?reapply=true" class="inline-block bg-primary-blue text-white px-8 py-3 rounded-xl font-bold text-xs shadow-xl">START NEW APPLICATION</a>
                     <?php endif; ?>
                 </div>
+                <div class="mt-10"><a href="apply.php" class="text-gray-400 text-xs font-bold hover:text-primary-blue"><i class="fas fa-sign-out-alt"></i> Logout View</a></div>
+            </div>
 
-                <a href="apply.php" class="text-gray-400 font-bold hover:text-primary-blue text-xs flex items-center justify-center gap-2">
-                    <i class="fas fa-arrow-left"></i> Logout / Back
-                </a>
+        <?php elseif ($success === "updated"): ?>
+            <div class="bg-white rounded-[2.5rem] shadow-2xl p-16 text-center">
+                <div class="w-20 h-20 bg-blue-100 text-primary-blue rounded-full flex items-center justify-center mx-auto mb-6"><i class="fas fa-check text-3xl"></i></div>
+                <h3 class="text-2xl font-black mb-2">Correction Sent!</h3>
+                <p class="text-gray-400 text-sm">Your updates have been received. We will review them shortly.</p>
+                <div class="mt-8"><a href="index.php" class="bg-primary-blue text-white px-10 py-3 rounded-xl font-bold">Back to Home</a></div>
             </div>
 
         <?php elseif ($success === "created"): ?>
-            <!-- Success Page -->
-            <div class="bg-white rounded-[2rem] shadow-2xl p-12 text-center">
-                <div class="w-24 h-24 bg-green-100 text-primary-green rounded-full flex items-center justify-center mx-auto mb-6"><i class="fas fa-check text-4xl"></i></div>
-                <h2 class="text-3xl font-extrabold text-neutral-heading mb-3">Submission Successful!</h2>
-                <p class="text-gray-500">Your documents have been uploaded and your application is now in <strong>Pending</strong> state. You can track your status by entering your email anytime on this page.</p>
-                <div class="mt-8 flex justify-center gap-4">
-                    <a href="index.php" class="bg-primary-blue text-white px-8 py-3 rounded-xl font-bold shadow-lg h-12 flex items-center">Back to Home</a>
-                    <a href="apply.php?track_email=<?php echo $email; ?>" class="bg-primary-green text-white px-8 py-3 rounded-xl font-bold shadow-lg h-12 flex items-center">View Status</a>
-                </div>
+            <div class="bg-white rounded-[2.5rem] shadow-2xl p-16 text-center">
+                <div class="w-20 h-20 bg-green-100 text-primary-green rounded-full flex items-center justify-center mx-auto mb-6"><i class="fas fa-check text-3xl"></i></div>
+                <h3 class="text-2xl font-black mb-2">Application Received!</h3>
+                <p class="text-gray-400 text-sm">Track your progress using your email on this page.</p>
+                <div class="mt-8"><a href="apply.php?track_email=<?php echo $email; ?>" class="bg-primary-green text-white px-10 py-3 rounded-xl font-bold">Track Status</a></div>
             </div>
 
         <?php else: ?>
-            <!-- FORM STEPS -->
-            <div id="form-container" class="bg-white rounded-[2rem] shadow-2xl p-8 md:p-12 relative overflow-hidden">
-                <div class="text-center mb-10">
-                    <h1 class="text-3xl font-black text-primary-blue">Loan Application</h1>
-                    <p class="text-gray-400 text-sm">Join Capital Bridge Finance and empower your goals.</p>
-                </div>
-
-                <?php if ($error): ?>
-                    <div class="bg-red-50 text-red-600 p-4 rounded-xl mb-6 flex items-center gap-3 border border-red-100">
-                        <i class="fas fa-exclamation-circle"></i>
-                        <p class="text-xs font-bold"><?php echo $error; ?></p>
-                    </div>
-                <?php endif; ?>
-
-                <form id="loanForm" method="POST" enctype="multipart/form-data">
+            <div class="bg-white rounded-[2.5rem] shadow-2xl p-8 md:p-12 relative overflow-hidden">
+                <div class="text-center mb-10"><h1 class="text-3xl font-black text-primary-blue">Loan Application</h1></div>
+                <?php if ($error): ?><div class="bg-red-50 text-red-600 p-4 rounded-2xl mb-6 text-xs text-center border border-red-100 font-bold"><?php echo $error; ?></div><?php endif; ?>
+                
+                <form id="loanForm" method="POST" enctype="multipart/form-data" class="space-y-6">
                     <input type="hidden" name="submit_application" value="1">
-                    
+                    <!-- Steps logic same as before but minimalized for implementation -->
                     <div id="step-1" class="form-step space-y-6">
-                        <div class="bg-blue-50 p-6 rounded-3xl mb-8">
-                            <label class="block text-sm font-bold text-primary-blue mb-4 text-center">CHOOSE YOUR LOAN TYPE</label>
+                        <div class="bg-blue-50 p-6 rounded-[2rem] mb-8">
+                            <label class="block text-xs font-black text-primary-blue mb-4 text-center">CHOOSE LOAN TYPE</label>
                             <div class="grid grid-cols-2 gap-4">
                                 <label class="cursor-pointer">
                                     <input type="radio" name="loan_type" value="Salary" required class="hidden peer" onchange="updateDocFields()">
-                                    <div class="bg-white border-2 border-transparent peer-checked:border-primary-green p-4 rounded-2xl text-center transition-all hover:bg-gray-50">
-                                        <i class="fas fa-money-check-alt text-2xl text-primary-green mb-2"></i>
-                                        <span class="block text-xs font-black uppercase text-gray-700">Salary Loan</span>
-                                    </div>
+                                    <div class="bg-white border-2 border-transparent peer-checked:border-primary-green p-4 rounded-2xl text-center"><span class="text-xs font-black">SALARY</span></div>
                                 </label>
                                 <label class="cursor-pointer">
                                     <input type="radio" name="loan_type" value="Business" required class="hidden peer" onchange="updateDocFields()">
-                                    <div class="bg-white border-2 border-transparent peer-checked:border-primary-blue p-4 rounded-2xl text-center transition-all hover:bg-gray-50">
-                                        <i class="fas fa-store text-2xl text-primary-blue mb-2"></i>
-                                        <span class="block text-xs font-black uppercase text-gray-700">Business Loan</span>
-                                    </div>
+                                    <div class="bg-white border-2 border-transparent peer-checked:border-primary-blue p-4 rounded-2xl text-center"><span class="text-xs font-black">BUSINESS</span></div>
                                 </label>
                             </div>
                         </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-2">
-                                <label class="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Full Name</label>
-                                <input type="text" name="customer_name" required class="w-full border border-gray-100 bg-gray-50/50 rounded-2xl px-4 py-3.5 focus:ring-2 focus:ring-primary-green focus:bg-white outline-none" placeholder="John Doe">
-                            </div>
-                            <div class="space-y-2">
-                                <label class="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Email Address</label>
-                                <input type="email" name="email" required class="w-full border border-gray-100 bg-gray-50/50 rounded-2xl px-4 py-3.5 focus:ring-2 focus:ring-primary-green focus:bg-white outline-none" placeholder="john@example.com">
-                            </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="text" name="customer_name" required placeholder="Full Name" class="p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue">
+                            <input type="email" name="email" required placeholder="Email Address" class="p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue">
+                            <input type="tel" name="phone" required placeholder="Phone Number" class="p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue">
+                            <input type="text" name="nationalId" required placeholder="National ID" class="p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-primary-blue">
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-2">
-                                <label class="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Phone Number</label>
-                                <input type="tel" name="phone" required class="w-full border border-gray-100 bg-gray-50/50 rounded-2xl px-4 py-3.5 focus:ring-2 focus:ring-primary-green focus:bg-white outline-none" placeholder="+250 7...">
-                            </div>
-                            <div class="space-y-2">
-                                <label class="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">National ID</label>
-                                <input type="text" name="nationalId" required class="w-full border border-gray-100 bg-gray-50/50 rounded-2xl px-4 py-3.5 focus:ring-2 focus:ring-primary-green focus:bg-white outline-none" placeholder="ID Number">
-                            </div>
-                        </div>
-
-                        <button type="button" onclick="nextPrev(1)" class="w-full bg-primary-blue hover:bg-blue-800 text-white font-black py-4 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3 group">
-                            Personal Details <i class="fas fa-arrow-right text-xs group-hover:translate-x-1 transition-transform"></i>
-                        </button>
+                        <button type="button" onclick="nextPrev(1)" class="w-full bg-primary-blue text-white py-4 rounded-2xl font-black shadow-xl">CONTINUE</button>
                     </div>
 
                     <div id="step-2" class="form-step space-y-6 hidden">
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Birth Place</label><input type="text" name="birth_place" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required></div>
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Gender</label><select name="gender" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required><option value="male">Male</option><option value="female">Female</option></select></div>
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Date of Birth</label><input type="date" name="dob" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required></div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <input type="text" name="birth_place" required placeholder="Birth Place" class="p-3 bg-gray-50 rounded-xl text-xs border">
+                            <select name="gender" class="p-3 bg-gray-50 rounded-xl text-xs border"><option value="male">Male</option><option value="female">Female</option></select>
+                            <input type="date" name="dob" required class="p-3 bg-gray-50 rounded-xl text-xs border">
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Father's Name</label><input type="text" name="father_name" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required></div>
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Mother's Name</label><input type="text" name="mother_name" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required></div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="text" name="father_name" required placeholder="Father's Name" class="p-3 bg-gray-50 rounded-xl text-xs border">
+                            <input type="text" name="mother_name" required placeholder="Mother's Name" class="p-3 bg-gray-50 rounded-xl text-xs border">
                         </div>
-                        <div class="space-y-2">
-                            <label class="text-[10px] font-bold text-gray-400 uppercase">Marriage Status</label>
-                            <select name="marriage_type" id="marriage_type" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required onchange="toggleSpouseFields()">
-                                <option value="Single">Single</option>
-                                <option value="Ivanga mutungo">Ivanga mutungo</option>
-                                <option value="Ivangura mutungo">Ivangura mutungo</option>
-                                <option value="Muhahano">Muhahano</option>
-                            </select>
+                        <select name="marriage_type" id="marriage_type" onchange="toggleSpouseFields()" class="w-full p-3 bg-gray-50 rounded-xl text-xs border">
+                            <option value="Single">Single</option><option value="Ivanga mutungo">Ivanga mutungo</option><option value="Ivangura mutungo">Ivangura mutungo</option><option value="Muhahano">Muhahano</option>
+                        </select>
+                        <div id="spouse_fields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="text" name="spouse" placeholder="Spouse Name" class="p-3 bg-gray-50 rounded-xl text-xs border">
+                            <input type="tel" name="spouse_phone" placeholder="Spouse Phone" class="p-3 bg-gray-50 rounded-xl text-xs border">
                         </div>
-                        <div id="spouse_fields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Spouse Name</label><input type="text" name="spouse" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm"></div>
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Spouse Phone</label><input type="tel" name="spouse_phone" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm"></div>
-                        </div>
-
-                        <div class="flex gap-4">
-                            <button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 text-gray-500 font-bold py-4 rounded-2xl hover:bg-gray-200 transition-all">Back</button>
-                            <button type="button" onclick="nextPrev(1)" class="w-2/3 bg-primary-blue text-white font-bold py-4 rounded-2xl hover:bg-blue-800 shadow-lg">Professional Info</button>
-                        </div>
+                        <div class="flex gap-4"><button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 p-4 rounded-2xl font-bold">BACK</button><button type="button" onclick="nextPrev(1)" class="w-2/3 bg-primary-blue text-white p-4 rounded-2xl font-bold">NEXT</button></div>
                     </div>
 
                     <div id="step-3" class="form-step space-y-6 hidden">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Occupation</label><input type="text" name="occupation" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required></div>
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Bank Account</label><input type="text" name="account_number" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required></div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="text" name="occupation" required placeholder="Occupation" class="p-3 bg-gray-50 rounded-xl text-xs border">
+                            <input type="text" name="account_number" required placeholder="Bank Account Number" class="p-3 bg-gray-50 rounded-xl text-xs border">
                         </div>
-                        <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Home Address</label><input type="text" name="address" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required placeholder="District, Sector..."></div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Project Name</label><input type="text" name="project" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required></div>
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Location</label><input type="text" name="location" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required></div>
+                        <input type="text" name="address" required placeholder="Home Address" class="p-3 bg-gray-50 rounded-xl text-xs border w-full">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="text" name="project" required placeholder="Project Name" class="p-3 bg-gray-50 rounded-xl text-xs border">
+                            <input type="text" name="location" required placeholder="Location" class="p-3 bg-gray-50 rounded-xl text-xs border">
+                            <input type="text" name="project_location" required placeholder="Project Location" class="p-3 bg-gray-50 rounded-xl text-xs border">
+                            <input type="text" name="caution_location" required placeholder="Caution Location" class="p-3 bg-gray-50 rounded-xl text-xs border">
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Project Loc.</label><input type="text" name="project_location" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required></div>
-                            <div class="space-y-2"><label class="text-[10px] font-bold text-gray-400 uppercase">Caution Loc.</label><input type="text" name="caution_location" class="w-full border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-sm" required></div>
-                        </div>
-
-                        <div class="flex gap-4">
-                            <button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 text-gray-500 font-bold py-4 rounded-2xl">Back</button>
-                            <button type="button" onclick="nextPrev(1)" class="w-2/3 bg-primary-blue text-white font-bold py-4 rounded-2xl">Upload Documents</button>
-                        </div>
+                        <div class="flex gap-4"><button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 p-4 rounded-2xl font-bold">BACK</button><button type="button" onclick="nextPrev(1)" class="w-2/3 bg-primary-blue text-white p-4 rounded-2xl font-bold">NEXT</button></div>
                     </div>
 
                     <div id="step-4" class="form-step space-y-6 hidden">
-                        <div class="bg-primary-blue text-white p-6 rounded-[2rem] mb-6">
-                            <h4 class="text-sm font-black uppercase flex items-center gap-2"><i class="fas fa-file-upload"></i> Required Documents</h4>
-                            <p class="text-[10px] text-blue-200 mt-1">Upload clear images or PDF files (Max 5MB each)</p>
+                        <div class="bg-primary-blue text-white p-6 rounded-3xl mb-4 text-center"><h4 class="text-xs font-black">UPLOAD DOCUMENTS</h4></div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-1"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">National ID *</label><input type="file" name="doc_id" required accept=".pdf,.jpg,.jpeg,.png" class="w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
+                            <div class="space-y-1"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">Marital Cert *</label><input type="file" name="doc_marital" required accept=".pdf,.jpg,.jpeg,.png" class="w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
+                            <div class="space-y-1 doc-salary"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">Work Contract *</label><input type="file" name="doc_contract" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
+                            <div class="space-y-1 doc-salary"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">Bank Statement *</label><input type="file" name="doc_statement" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
+                            <div class="space-y-1 doc-salary"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">Latest Payslip *</label><input type="file" name="doc_payslip" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
+                            <div class="space-y-1 doc-business hidden"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">RDB Certificate *</label><input type="file" name="doc_rdb" accept=".pdf,.jpg,.jpeg,.png" class="business-req w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
+                            <div class="space-y-1 doc-business hidden"><label class="text-[9px] font-bold text-gray-400 pl-1 uppercase">Bank/Momo Statement *</label><input type="file" name="doc_statement_alt" accept=".pdf,.jpg,.jpeg,.png" class="business-req w-full text-[10px] bg-gray-50 p-2 rounded-xl border border-dashed"></div>
                         </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="documentation_fields">
-                            <!-- Field: ID -->
-                            <div class="space-y-2">
-                                <label class="text-[10px] font-bold text-gray-500 uppercase">Copy of ID (Pic/PDF) *</label>
-                                <input type="file" name="doc_id" required accept=".pdf,.jpg,.jpeg,.png" class="w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
-                            </div>
-
-                            <!-- Field: Marital (Conditional) -->
-                            <div class="space-y-2 marital-doc hidden">
-                                <label class="text-[10px] font-bold text-gray-500 uppercase">Marital Status Cert. *</label>
-                                <input type="file" name="doc_marital" accept=".pdf,.jpg,.jpeg,.png" class="w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
-                            </div>
-
-                            <!-- SALARY ONLY -->
-                            <div class="space-y-2 doc-salary">
-                                <label class="text-[10px] font-bold text-gray-500 uppercase">Work Contract (PDF/Img) *</label>
-                                <input type="file" name="doc_contract" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
-                            </div>
-                            <div class="space-y-2 doc-salary">
-                                <label class="text-[10px] font-bold text-gray-500 uppercase">Bank Statement *</label>
-                                <input type="file" name="doc_statement" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
-                            </div>
-                            <div class="space-y-2 doc-salary">
-                                <label class="text-[10px] font-bold text-gray-500 uppercase">Latest Payslip *</label>
-                                <input type="file" name="doc_payslip" accept=".pdf,.jpg,.jpeg,.png" class="salary-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
-                            </div>
-
-                            <!-- BUSINESS ONLY -->
-                            <div class="space-y-2 doc-business hidden">
-                                <label class="text-[10px] font-bold text-gray-500 uppercase">RDB Certificate *</label>
-                                <input type="file" name="doc_rdb" accept=".pdf,.jpg,.jpeg,.png" class="business-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
-                            </div>
-                            <div class="space-y-2 doc-business hidden">
-                                <label class="text-[10px] font-bold text-gray-500 uppercase">Bank/Momo Statement *</label>
-                                <input type="file" name="doc_statement_alt" accept=".pdf,.jpg,.jpeg,.png" class="business-req w-full file:bg-primary-green file:text-white file:border-none file:px-4 file:py-2 file:rounded-xl file:text-xs text-xs text-gray-400 bg-gray-50 p-2 rounded-2xl border border-dashed border-gray-200">
-                            </div>
-                        </div>
-
-                        <div class="flex gap-4 mt-8">
-                            <button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 text-gray-500 font-bold py-4 rounded-2xl">Back</button>
-                            <button type="submit" class="w-2/3 bg-primary-green text-white font-black py-4 rounded-2xl shadow-xl hover:scale-105 transition-all">Submit Application</button>
-                        </div>
+                        <div class="flex gap-4"><button type="button" onclick="nextPrev(-1)" class="w-1/3 bg-gray-100 p-4 rounded-2xl font-bold">BACK</button><button type="submit" class="w-2/3 bg-primary-green text-white p-4 rounded-2xl font-black shadow-xl">SUBMIT NOW</button></div>
                     </div>
                 </form>
             </div>
@@ -370,11 +331,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
 
 <script>
 let currentStep = 1;
-
 function nextPrev(n) {
-    const steps = document.getElementsByClassName("form-step");
+    const steps = document.querySelectorAll(".form-step");
     if (n === 1 && !validateStep()) return;
-    
     steps[currentStep-1].classList.add("hidden");
     currentStep += n;
     steps[currentStep-1].classList.remove("hidden");
@@ -384,27 +343,8 @@ function nextPrev(n) {
 function validateStep() {
     const activeStep = document.getElementById("step-" + currentStep);
     const inputs = activeStep.querySelectorAll("input[required], select[required]");
-    
     for (let input of inputs) {
-        // Validation for file type
-        if (input.type === 'file' && input.files.length > 0) {
-            const ext = input.files[0].name.split('.').pop().toLowerCase();
-            const allowed = ['pdf', 'jpg', 'jpeg', 'png'];
-            if (!allowed.includes(ext)) {
-                alert("Error: Only PDF, JPG, and PNG files are allowed.");
-                return false;
-            }
-        }
-        
-        if (input.type === 'radio') {
-            const rads = activeStep.querySelectorAll(`input[name="${input.name}"]`);
-            let checked = false;
-            for(let r of rads) if(r.checked) checked = true;
-            if(!checked) return false;
-        } else if (!input.value && input.type !== 'file') {
-            input.classList.add("border-red-500");
-            return false;
-        }
+        if (!input.value) { input.classList.add("border-red-500"); return false; }
         input.classList.remove("border-red-500");
     }
     return true;
@@ -413,43 +353,28 @@ function validateStep() {
 function toggleSpouseFields() {
     const val = document.getElementById('marriage_type').value;
     const fields = document.getElementById('spouse_fields');
-    const maritalDoc = document.querySelectorAll('.marital-doc');
-    
-    if (val === 'Single') {
-        fields.classList.add('hidden');
-        maritalDoc.forEach(d => d.classList.add('hidden'));
-        document.getElementsByName('doc_marital')[0].required = false;
-    } else {
-        fields.classList.remove('hidden');
-        maritalDoc.forEach(d => d.classList.remove('hidden'));
-        document.getElementsByName('doc_marital')[0].required = true;
-    }
+    if (val === 'Single') fields.classList.add('hidden');
+    else fields.classList.remove('hidden');
 }
 
 function updateDocFields() {
     const type = document.querySelector('input[name="loan_type"]:checked').value;
     const salaryDocs = document.querySelectorAll('.doc-salary');
     const businessDocs = document.querySelectorAll('.doc-business');
-    const salaryReqs = document.querySelectorAll('.salary-req');
-    const businessReqs = document.querySelectorAll('.business-req');
-
     if (type === 'Salary') {
         salaryDocs.forEach(d => d.classList.remove('hidden'));
         businessDocs.forEach(d => d.classList.add('hidden'));
-        salaryReqs.forEach(r => r.required = true);
-        businessReqs.forEach(r => r.required = false);
     } else {
         salaryDocs.forEach(d => d.classList.add('hidden'));
         businessDocs.forEach(d => d.classList.remove('hidden'));
-        salaryReqs.forEach(r => r.required = false);
-        businessReqs.forEach(r => r.required = true);
     }
 }
 </script>
 
 <style>
-@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-.gradient-blue { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); }
+.gradient-blue { background: linear-gradient(135deg, #0f172a 0%, #1e40af 100%); }
+.animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
 </style>
 
 <?php 

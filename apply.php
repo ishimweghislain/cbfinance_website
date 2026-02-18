@@ -16,8 +16,7 @@ $track_url_email = isset($_GET['track_email']) ? trim($_GET['track_email']) : ''
 if (isset($_GET['reapply']) && $_GET['reapply'] == 'true' && !empty($track_url_email)) {
     if ($conn) {
         $clean_email = $conn->real_escape_string($track_url_email);
-        // Only delete if it's actually rejected to allow a fresh start
-        $conn->query("DELETE FROM customers WHERE email = '$clean_email' AND (LOWER(TRIM(status)) = 'rejected' OR status = '' OR status IS NULL)");
+        // We no longer delete rejected records to keep track of history as requested
     }
 }
 
@@ -78,8 +77,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
             }
             
             if ($curr_stat == 'rejected') {
-                // If rejected, allow a fresh start by deleting the old record (prevents unique code conflicts)
-                $conn->query("DELETE FROM customers WHERE customer_id = " . $existing['customer_id']);
+                // Keep the record for history, allow fresh application
+                // No action needed here, just let it proceed to INSERT
             } elseif ($curr_stat == 'action required') {
                 $already_applied = true;
                 $error = "CORRECTION NEEDED: Admin has requested updates on your previous application. Please use the tracking bar at the top right to fix and resubmit.";
@@ -99,8 +98,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
             $data = [];
             foreach($_POST as $key => $val) { $data[$key] = $conn->real_escape_string($val); }
             
-            $upload_dir = "uploads/documents/";
-            if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+            // Define upload directory - pointing into the app directory so admin can see them
+            $upload_dir = "app.cbfinance.rw/uploads/documents/";
+            if (!is_dir($upload_dir)) {
+                mkdir($upload_dir, 0777, true);
+            }
             
             $doc_paths = [];
             $required_files = ($data['loan_type'] == 'Salary') ? 
@@ -112,7 +114,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
                     $ext = strtolower(pathinfo($_FILES[$df]['name'], PATHINFO_EXTENSION));
                     $fname = $df . "_" . time() . "_" . mt_rand(10, 99) . "." . $ext;
                     move_uploaded_file($_FILES[$df]['tmp_name'], $upload_dir . $fname);
-                    $doc_paths[$df] = $upload_dir . $fname;
+                    // Store the relative path from the app root for DB
+                    $doc_paths[$df] = "uploads/documents/" . $fname;
                 }
             }
 

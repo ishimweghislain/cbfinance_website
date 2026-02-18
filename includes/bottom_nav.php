@@ -18,12 +18,13 @@ $currentPage = getCurrentPage();
         </div>
         <span class="text-[10px] mt-1 font-medium text-primary-green -translate-y-2">Apply</span>
     </a>
-    <a href="https://app.cbfinance.rw/login.php" target="_blank" class="flex flex-col items-center text-primary-blue">
-        <i class="fas fa-lock text-xl"></i>
-        <span class="text-[10px] mt-1 font-medium">Portal</span>
-    </a>
     <a href="contact.php" class="flex flex-col items-center <?php echo $currentPage == 'contact.php' ? 'text-primary-green' : 'text-gray-400'; ?>">
         <i class="fas fa-envelope text-xl"></i>
         <span class="text-[10px] mt-1 font-medium">Contact</span>
     </a>
+    <a href="https://app.cbfinance.rw/login.php" target="_blank" class="flex flex-col items-center text-primary-blue">
+        <i class="fas fa-lock text-xl"></i>
+        <span class="text-[10px] mt-1 font-medium">Portal</span>
+    </a>
+    
 </div>

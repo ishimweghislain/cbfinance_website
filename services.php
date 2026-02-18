@@ -1,3 +1,5 @@
+
+
 <?php include 'includes/head.php'; ?>
 <?php include 'includes/navbar.php'; ?>
 
@@ -5,14 +7,14 @@
 <section class="gradient-blue py-20">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">Our Services</h1>
-        <p class="text-blue-100 text-lg max-w-2xl mx-auto">Currently, we specialize exclusively in loan products, providing the capital you need to succeed.</p>
+      
     </div>
 </section>
 
 <!-- Loans Section -->
 <section class="py-24 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="text-center mb-16">
-        <h2 class="text-3xl font-extrabold text-neutral-heading uppercase tracking-widest mb-4">Loan Products</h2>
+        <h2 class="text-3xl font-extrabold text-neutral-heading uppercase tracking-widest mb-4">Loan Services</h2>
         <div class="w-24 h-1.5 bg-primary-green mx-auto rounded-full"></div>
     </div>
 
@@ -55,33 +57,33 @@
             <div class="p-10">
                 <div class="space-y-6">
                     <!-- Interest Rate -->
-                    <div class="flex items-center justify-between p-6 bg-blue-50 rounded-2xl border border-blue-100">
-                        <div>
-                            <span class="block font-bold text-primary-blue uppercase text-xs tracking-widest mb-1">Interest Rate</span>
-                            <span class="text-gray-700 font-medium">Monthly reducing balance</span>
-                        </div>
-                        <div class="text-3xl font-black text-primary-blue">5%</div>
-                    </div>
+                  
 
                     <!-- Application Fee -->
                     <div class="flex items-center justify-between p-6 bg-green-50 rounded-2xl border border-green-100">
                         <div>
                             <span class="block font-bold text-primary-green uppercase text-xs tracking-widest mb-1">Application Fee</span>
-                            <span class="text-gray-700 font-medium">Standard processing fee</span>
+                            <span class="text-gray-700 font-medium">This is an application fee</span>
                         </div>
                         <div class="text-2xl font-black text-primary-green text-right">
                             10,000 - 15,000 <br>
                             <small class="text-[10px] uppercase tracking-tighter text-gray-400">RWF (One-time)</small>
                         </div>
                     </div>
-
+  <div class="flex items-center justify-between p-6 bg-blue-50 rounded-2xl border border-blue-100">
+                        <div>
+                            <span class="block font-bold text-primary-blue uppercase text-xs tracking-widest mb-1">Interest Rate</span>
+                            <span class="text-gray-700 font-medium">On reducing balance/Month</span>
+                        </div>
+                        <div class="text-3xl font-black text-primary-blue">5%</div>
+                    </div>
                     <!-- Commission -->
                     <div class="flex items-center justify-between p-6 bg-gray-50 rounded-2xl border border-gray-100">
                         <div>
-                            <span class="block font-bold text-gray-400 uppercase text-xs tracking-widest mb-1">Commission</span>
-                            <span class="text-gray-600 font-medium">Processing commission</span>
+                            <span class="block font-bold text-gray-400 uppercase text-xs tracking-widest mb-1">Management Fees</span>
+                            <span class="text-gray-600 font-medium"> Per month.</span>
                         </div>
-                        <div class="text-2xl font-black text-gray-700">1.5%</div>
+                        <div class="text-2xl font-black text-gray-700">5.5%</div>
                     </div>
                 </div>
 

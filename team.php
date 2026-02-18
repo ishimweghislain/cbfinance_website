@@ -5,7 +5,7 @@
 <section class="gradient-blue py-20">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">Meet Our Leadership</h1>
-        <p class="text-blue-100 text-lg max-w-2xl mx-auto">The dedicated professionals behind CB Finance's commitment to excellence and your financial success.</p>
+        <p class="text-blue-100 text-lg max-w-2xl mx-auto">The dedicated professionals behind Capital Bridge Finance's commitment to excellence and your financial success.</p>
     </div>
 </section>
 
@@ -44,7 +44,7 @@
                 </div>
             </div>
             <div class="text-center md:text-left">
-                <h3 class="text-2xl font-bold text-neutral-heading mb-1">Anna Batamuliza</h3>
+                <h3 class="text-2xl font-bold text-neutral-heading mb-1">Batamuliza Anna</h3>
                 <p class="text-primary-blue font-semibold mb-3 uppercase tracking-wider text-sm">Head Marketing & Sales</p>
                 <div class="flex items-center justify-center md:justify-start text-gray-500 text-sm italic">
                     <i class="fas fa-envelope mr-2 text-xs"></i> batamulizaa@cbfinance.rw

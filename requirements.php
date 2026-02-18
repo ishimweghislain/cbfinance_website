@@ -42,13 +42,16 @@
                             <i class="fas fa-file-signature text-primary-green"></i> <span class="text-sm font-medium">Professional Work Contract</span>
                         </li>
                         <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-green transition-colors">
-                            <i class="fas fa-university text-primary-green"></i> <span class="text-sm font-medium">Bank Statement (Last 6 Months)</span>
+                            <i class="fas fa-university text-primary-green"></i> <span class="text-sm font-medium">Bank Statement (Last 3 Months)</span>
                         </li>
                         <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-green transition-colors">
                             <i class="fas fa-money-check-alt text-primary-green"></i> <span class="text-sm font-medium">Three (3) Latest Payslips</span>
                         </li>
                         <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-green transition-colors">
-                            <i class="fas fa-ring text-primary-green"></i> <span class="text-sm font-medium">Marital Status Certificate (If Married)</span>
+                            <i class="fas fa-ring text-primary-green"></i> <span class="text-sm font-medium">Marital Status Certificate</span>
+                        </li>
+                        <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-green transition-colors">
+                            <i class="fas fa-ring text-primary-green"></i> <span class="text-sm font-medium">Loan security</span>
                         </li>
                     </ul>
                 </div>
@@ -88,7 +91,10 @@
                             <i class="fas fa-history text-primary-blue"></i> <span class="text-sm font-medium">Bank or MoMo Statement (Last 6 Months)</span>
                         </li>
                         <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-blue transition-colors">
-                            <i class="fas fa-ring text-primary-blue"></i> <span class="text-sm font-medium">Marital Status Certificate (If Married)</span>
+                            <i class="fas fa-ring text-primary-blue"></i> <span class="text-sm font-medium">Marital Status Certificate </span>
+                        </li>
+                         <li class="flex items-center gap-4 text-gray-600 bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:border-primary-green transition-colors">
+                            <i class="fas fa-ring text-primary-green"></i> <span class="text-sm font-medium">Loan security</span>
                         </li>
                     </ul>
                 </div>
@@ -112,7 +118,7 @@
                 <div class="w-[1px] h-20 bg-white/10 hidden md:block"></div>
                 <div class="text-center">
                     <span class="block text-gray-400 font-bold uppercase tracking-widest text-xs mb-3">Commission</span>
-                    <span class="text-6xl font-black text-primary-light">1.5%</span>
+                    <span class="text-6xl font-black text-primary-light">5.5%</span>
                     <p class="text-blue-100/60 text-xs mt-2 uppercase">Processing Fee</p>
                 </div>
             </div>

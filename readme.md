@@ -1,1 +1,0 @@
-management fee 5.5 -===flat

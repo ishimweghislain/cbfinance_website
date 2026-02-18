@@ -41,10 +41,8 @@
             <div>
                 <h4 class="text-lg font-bold mb-6 border-b-2 border-primary-green w-16 pb-2">Services</h4>
                 <ul class="space-y-4 text-gray-400">
-                    <li><a href="services.php" class="hover:text-primary-green transition-colors">Salary Advance</a></li>
-                    <li><a href="services.php" class="hover:text-primary-green transition-colors">Business Loan</a></li>
-                    <li><a href="services.php" class="hover:text-primary-green transition-colors">Emergency Cash</a></li>
-                    <li><a href="services.php" class="hover:text-primary-green transition-colors">Invoice Advancing</a></li>
+                    <li><a href="services.php" class="hover:text-primary-green transition-colors">Loans</a></li>
+                  
                 </ul>
             </div>
 

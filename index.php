@@ -16,11 +16,11 @@
                 <i class="fas fa-chart-line mr-2"></i> Trusted Financial Partner
             </span>
             <h1 class="text-5xl md:text-7xl font-bold leading-tight mb-6">
-                Redefining Your <br>
-                <span class="text-primary-green">Financial Future</span>
+                Empowering Your <br>
+                <span class="text-primary-green">Financial Journey</span>
             </h1>
             <p class="text-xl text-gray-200 mb-10 leading-relaxed">
-                Empowering individuals and businesses with fast, secure, and flexible financial solutions. Get the support you need, when you need it.
+                Financing you with fast, secure,flexible and minimal documentation. Get the support you need, when you need it.
             </p>
             <div class="flex flex-col sm:flex-row gap-4">
                 <a href="apply.php" class="bg-primary-green hover:bg-green-600 text-white px-8 py-4 rounded-full font-bold text-lg transition-all duration-300 transform hover:scale-105 shadow-xl flex items-center justify-center gap-3">

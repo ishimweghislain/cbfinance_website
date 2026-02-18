@@ -8,16 +8,20 @@ $error = "";
 $already_applied = false;
 
 // Handle Status Check / Login
-if (isset($_GET['track_email'])) {
+if (isset($_GET['track_email']) || isset($_GET['reapply'])) {
     $conn = getWebsiteConnection();
-    $track_email = $conn->real_escape_string($_GET['track_email']);
-    $res = $conn->query("SELECT * FROM customers WHERE email = '$track_email' LIMIT 1");
-    if ($res && $res->num_rows > 0) {
-        $found_customer = $res->fetch_assoc();
-        // Redirect to a dashboard-like view or show here
-        $success = "found"; 
-    } else {
-        $error = "No application found with this email.";
+    $track_email = $conn->real_escape_string($_GET['track_email'] ?? '');
+    
+    if (isset($_GET['reapply'])) {
+        // If reapply is clicked, we just show the form directly (don't track)
+    } elseif ($track_email) {
+        $res = $conn->query("SELECT * FROM customers WHERE email = '$track_email' LIMIT 1");
+        if ($res && $res->num_rows > 0) {
+            $found_customer = $res->fetch_assoc();
+            $success = "found"; 
+        } else {
+            $error = "No application found with this email.";
+        }
     }
 }
 
@@ -46,7 +50,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
             $phone = $conn->real_escape_string($_POST['phone']);
             $id_number = $conn->real_escape_string($_POST['nationalId']);
             $loan_type = $conn->real_escape_string($_POST['loan_type']);
-            // ... (other fields from previous version)
+            
             $dob = $conn->real_escape_string($_POST['dob']);
             $gender = ucfirst($conn->real_escape_string($_POST['gender']));
             $birth_place = $conn->real_escape_string($_POST['birth_place']);
@@ -155,19 +159,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
                     $stat = $found_customer['status'];
                     if ($stat == 'Pending'): ?>
                         <div class="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4"><i class="fas fa-clock text-2xl"></i></div>
-                        <h4 class="text-xl font-bold text-yellow-600">PENDING REVIEW</h4>
+                        <h4 class="text-xl font-bold text-yellow-600 uppercase tracking-tighter">Pending Review</h4>
                         <p class="text-xs text-gray-400 mt-2 max-w-sm">Our team is currently verifying your documents. This usually takes 24-48 hours. Please check back later.</p>
                     <?php elseif ($stat == 'Approved'): ?>
                         <div class="w-16 h-16 bg-green-100 text-primary-green rounded-full flex items-center justify-center mb-4"><i class="fas fa-check-circle text-2xl"></i></div>
-                        <h4 class="text-xl font-bold text-primary-green">APPLICATION APPROVED!</h4>
-                        <div class="mt-4 p-6 bg-green-50 rounded-2xl border border-green-100 text-green-800">
+                        <h4 class="text-xl font-bold text-primary-green uppercase tracking-tighter">Application Approved!</h4>
+                        <div class="mt-4 p-6 bg-green-50 rounded-2xl border border-green-100 text-green-800 text-center">
                             <p class="font-bold flex items-center justify-center gap-2 mb-2"><i class="fas fa-bullhorn rotate-[-20deg]"></i> CONGRATULATIONS!</p>
-                            <p class="text-xs leading-relaxed">Your membership has been approved. Please <strong>visit our office</strong> at Ikaze House, 2nd Floor with your original documents or <strong>call us at +250 796 880 272</strong> to finalize your loan processing.</p>
+                            <p class="text-xs leading-relaxed">Your membership has been approved. Please <strong>visit our office</strong> at Ikaze House, 2nd Floor or <strong>call us at +250 796 880 272</strong> to finalize your loan processing.</p>
                         </div>
                     <?php else: ?>
                         <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4"><i class="fas fa-times-circle text-2xl"></i></div>
-                        <h4 class="text-xl font-bold text-red-600">APPLICATION REJECTED</h4>
-                        <p class="text-xs text-gray-400 mt-2">Unfortunately, your application does not meet our current requirements. Please contact our office for more details.</p>
+                        <h4 class="text-xl font-bold text-red-600 uppercase tracking-tighter">Application Rejected</h4>
+                        <p class="text-xs text-gray-400 mt-2 max-w-sm text-center">Unfortunately, your application does not meet our current requirements. <strong>You are welcome to re-apply at any time</strong> with updated documentation.</p>
+                        <div class="mt-8">
+                            <a href="apply.php?reapply=true" class="bg-primary-blue text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-blue-800 transition-all flex items-center gap-3">
+                                <i class="fas fa-redo-alt"></i> RE-APPLY NOW
+                            </a>
+                        </div>
                     <?php endif; ?>
                 </div>
 
@@ -440,6 +449,7 @@ function updateDocFields() {
 
 <style>
 @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.gradient-blue { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); }
 </style>
 
 <?php 

@@ -30,7 +30,7 @@
         }
         .login-side-image {
             flex: 1.2;
-            background: url('../images/homepagepic.jpg') no-repeat center center;
+            background: url('https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=2000') no-repeat center center;
             background-size: cover;
             position: relative;
             display: none; /* Hidden on mobile */
@@ -59,27 +59,28 @@
             max-width: 400px;
         }
         .logo-box {
-            width: 60px;
-            height: 60px;
+            width: 50px;
+            height: 50px;
             background: var(--primary);
-            border-radius: 18px;
+            border-radius: 15px;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 24px;
+            margin-bottom: 16px;
             box-shadow: 0 10px 20px rgba(30, 64, 175, 0.2);
         }
         .login-header h2 {
             font-weight: 800;
             color: #111827;
-            font-size: 1.85rem;
-            margin-bottom: 8px;
+            font-size: 1.6rem;
+            margin-bottom: 4px;
             letter-spacing: -0.025em;
         }
         .login-header p {
             color: #6b7280;
-            margin-bottom: 32px;
+            margin-bottom: 20px;
             font-weight: 500;
+            font-size: 0.9rem;
         }
         .form-label {
             font-weight: 700;
@@ -136,7 +137,7 @@
             box-shadow: 0 8px 20px rgba(30, 64, 175, 0.3);
         }
         .back-link {
-            margin-top: 32px;
+            margin-top: 20px;
             display: inline-flex;
             align-items: center;
             color: #6b7280;

@@ -194,7 +194,7 @@
                         <label class="form-label">Username / Email</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-person-fill"></i></span>
-                            <input type="text" class="form-control" id="username" placeholder="admin@cbfinance.rw" required>
+                            <input type="text" class="form-control" id="username" placeholder="Input your username" required>
                         </div>
                     </div>
                     
@@ -202,7 +202,7 @@
                         <label class="form-label">Password</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-key-fill"></i></span>
-                            <input type="password" class="form-control" id="password" placeholder="••••••••" required>
+                            <input type="password" class="form-control" id="password" placeholder="I hope you remember your password !" required>
                         </div>
                     </div>
 
@@ -222,7 +222,7 @@
                     </div>
                 </form>
 
-                <a href="../index.php" class="back-link">
+                <a href="https://cbfinance.rw/index.php" class="back-link">
                     <i class="bi bi-arrow-left"></i> Back to main website
                 </a>
             </div>

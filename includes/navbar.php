@@ -50,8 +50,8 @@ $currentPage = getCurrentPage();
                     <a href="index.php" class="flex items-center space-x-3 group">
                         <img src="images/CAPITAL BRIDGE LOGO.png" alt="CB Finance Logo" class="h-12 w-auto transition-transform duration-300 group-hover:scale-105">
                         <div class="flex flex-col">
-                            <span class="text-primary-blue font-black text-xl leading-none tracking-tighter">CB FINANCE</span>
-                            <span class="text-[8px] text-primary-green font-bold tracking-[0.2em] uppercase mt-1">Capital Bridge Finance Ltd</span>
+                            <span class="text-primary-blue font-black text-xl leading-none tracking-tighter">Capital Bridge Finance</span>
+                            <span class="text-[8px] text-primary-green font-bold tracking-[0.2em] uppercase mt-1">Empowering your financial journey</span>
                         </div>
                     </a>
                 </div>

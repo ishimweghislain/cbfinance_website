@@ -5,8 +5,9 @@
             <div class="col-span-1 md:col-span-1 border-gray-600">
                 <div class="flex items-center space-x-2 mb-6">
                     <img src="images/CAPITAL BRIDGE LOGO.png" alt="CB Finance Logo" class="h-12 w-auto brightness-0 invert">
-                    <span class="text-white font-bold text-xl">CB FINANCE</span>
+                    <span class="text-white font-bold text-xl uppercase tracking-tighter">Capital Bridge Finance</span>
                 </div>
+                <p class="text-gray-400 text-xs mt-1 italic">Empowering your financial journey</p>
                 <p class="text-gray-400 leading-relaxed mb-6">
                     Providing professional and innovative financial solutions to fuel your growth and stability.
                 </p>
@@ -57,7 +58,7 @@
                     </li>
                     <li class="flex items-center space-x-3">
                         <i class="fas fa-phone-alt text-primary-green"></i>
-                        <span>+250 785 973 036</span>
+                        <span>+250 796 880 272</span>
                     </li>
                     <li class="flex items-center space-x-3">
                         <i class="fas fa-envelope text-primary-green"></i>

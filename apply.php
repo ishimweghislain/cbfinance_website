@@ -126,15 +126,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
             $code = "PEND-" . mt_rand(100000, 999999);
             $sql = "INSERT INTO customers (
                 customer_code, customer_name, email, phone, id_number, loan_type, 
+                requested_amount, loan_duration,
                 doc_id, doc_contract, doc_statement, doc_payslip, doc_marital, doc_rdb,
                 birth_place, account_number, occupation, gender, date_of_birth,
-                father_name, mother_name, spouse, spouse_occupation, spouse_phone, marriage_type,
+                spouse, spouse_occupation, spouse_phone, marriage_type,
                 province, address, location, project, project_location, caution_location, status
             ) VALUES (
                 '$code', '$data[customer_name]', '$email', '$data[phone]', '$data[nationalId]', '$data[loan_type]',
+                '$data[requested_amount]', '$data[loan_duration]',
                 '{$doc_paths['doc_id']}', '{$doc_paths['doc_contract']}', '{$doc_paths['doc_statement']}', '{$doc_paths['doc_payslip']}', '{$doc_paths['doc_marital']}', '{$doc_paths['doc_rdb']}',
                 '$data[birth_place]', '$data[account_number]', '$data[occupation]', '$data[gender]', '$data[dob]',
-                '$data[father_name]', '$data[mother_name]', '$data[spouse]', '$data[spouse_occupation]', '$data[spouse_phone]', '$data[marriage_type]',
+                '$data[spouse]', '$data[spouse_occupation]', '$data[spouse_phone]', '$data[marriage_type]',
                 '$data[province]', '$data[address]', '$data[location]', '$data[project]', '$data[project_location]', '$data[caution_location]', 'Pending'
             )";
 
@@ -258,7 +260,11 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
             <div class="glass-card rounded-[3rem] p-16 text-center shadow-2xl animate-in">
                 <div class="w-24 h-24 bg-emerald-500 text-white rounded-[2.5rem] flex items-center justify-center mx-auto mb-10 shadow-2xl shadow-emerald-200"><i class="fas fa-check text-4xl"></i></div>
                 <h3 class="text-4xl font-black text-gray-900 mb-4"><?php echo ($success === 'updated') ? 'Resubmitted!' : 'Application Sent!'; ?></h3>
-                <p class="text-gray-500 text-sm font-bold max-w-sm mx-auto">Our team has received your details. Track live status using your email anytime.</p>
+                <p class="text-gray-500 text-sm font-bold max-w-sm mx-auto mb-6">Our team has received your details. Track live status using your email anytime.</p>
+                <div class="bg-amber-50 p-6 rounded-2xl border border-amber-100 max-w-md mx-auto">
+                    <p class="text-[11px] text-amber-900 font-black uppercase tracking-widest mb-2"><i class="fas fa-exclamation-triangle me-2"></i> Final Confirmation Required</p>
+                    <p class="text-[12px] text-amber-800 font-bold leading-relaxed">Please note: Whatever collateral is needed for your specific loan must be physically provided and verified at our offices before final approval can be granted.</p>
+                </div>
                 <div class="mt-12 flex gap-4 justify-center">
                     <a href="index.php" class="bg-gray-100 text-gray-600 px-10 py-5 rounded-2xl font-black text-xs hover:bg-gray-200 transition-all shadow-sm">HOME</a>
                     <a href="apply.php" class="bg-primary-blue text-white px-10 py-5 rounded-2xl font-black text-xs shadow-xl">FINISH</a>
@@ -350,13 +356,13 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div class="space-y-2">
-                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Father Name</label>
-                                <input type="text" name="father_name" id="father_name" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Loan Amount Requested (RWF)</label>
+                                <input type="number" name="requested_amount" id="requested_amount" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold shadow-sm outline-none focus:border-primary-blue transition-all" placeholder="e.g. 500000">
                                 <p class="err-msg text-[10px] text-rose-500 font-bold pl-4 hidden"></p>
                             </div>
                             <div class="space-y-2">
-                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Mother Name</label>
-                                <input type="text" name="mother_name" id="mother_name" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold">
+                                <label class="text-[10px] font-black uppercase text-gray-400 pl-4">Repayment Period (Months)</label>
+                                <input type="number" name="loan_duration" id="loan_duration" required class="w-full p-4 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold shadow-sm outline-none focus:border-primary-blue transition-all" placeholder="e.g. 12">
                                 <p class="err-msg text-[10px] text-rose-500 font-bold pl-4 hidden"></p>
                             </div>
                         </div>
@@ -501,15 +507,9 @@ function val() {
             ok = false;
         }
 
-        const fname = document.getElementById('father_name').value.trim();
-        if (fname && fname.split(' ').length < 2) {
-            showError('father_name', 'Full father name required (min 2 names).');
-            ok = false;
-        }
-
-        const mname = document.getElementById('mother_name').value.trim();
-        if (mname && mname.split(' ').length < 2) {
-            showError('mother_name', 'Full mother name required (min 2 names).');
+        const amt = document.getElementById('requested_amount').value;
+        if (amt && amt <= 0) {
+            showError('requested_amount', 'Please enter a valid amount.');
             ok = false;
         }
     }

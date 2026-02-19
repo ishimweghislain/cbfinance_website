@@ -288,21 +288,21 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                     
                     <!-- STEP 1 -->
                     <div id="step-1" class="form-step space-y-12">
-                        <div class="bg-gray-50 p-10 rounded-[2.5rem] border border-gray-100 shadow-inner">
-                            <label class="block text-[10px] font-black text-gray-400 mb-10 text-center tracking-[0.5em] uppercase">Choose Application Path</label>
-                            <div class="grid grid-cols-2 gap-8">
+                        <div class="bg-gray-50 p-6 md:p-10 rounded-[2.5rem] border border-gray-100 shadow-inner">
+                            <label class="block text-[10px] font-black text-gray-400 mb-6 md:mb-10 text-center tracking-[0.5em] uppercase">Choose Application Path</label>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-8">
                                 <label class="cursor-pointer group">
                                     <input type="radio" name="loan_type" value="Salary" required class="hidden peer" onchange="udf()">
-                                    <div class="bg-white border-4 border-transparent peer-checked:border-primary-green p-8 rounded-3xl text-center transition-all shadow-xl group-hover:scale-[1.03]">
-                                        <i class="fas fa-wallet text-2xl text-primary-green mb-4 block"></i>
-                                        <span class="block text-xs font-black uppercase text-gray-800">Salary Loan</span>
+                                    <div class="bg-white border-4 border-transparent peer-checked:border-primary-green p-5 md:p-8 rounded-3xl text-center transition-all shadow-xl group-hover:scale-[1.03]">
+                                        <i class="fas fa-wallet text-xl md:text-2xl text-primary-green mb-3 md:mb-4 block"></i>
+                                        <span class="block text-[10px] md:text-xs font-black uppercase text-gray-800">Salary Loan</span>
                                     </div>
                                 </label>
                                 <label class="cursor-pointer group">
                                     <input type="radio" name="loan_type" value="Business" required class="hidden peer" onchange="udf()">
-                                    <div class="bg-white border-4 border-transparent peer-checked:border-primary-blue p-8 rounded-3xl text-center transition-all shadow-xl group-hover:scale-[1.03]">
-                                        <i class="fas fa-landmark text-2xl text-primary-blue mb-4 block"></i>
-                                        <span class="block text-xs font-black uppercase text-gray-800">Business Loan</span>
+                                    <div class="bg-white border-4 border-transparent peer-checked:border-primary-blue p-5 md:p-8 rounded-3xl text-center transition-all shadow-xl group-hover:scale-[1.03]">
+                                        <i class="fas fa-landmark text-xl md:text-2xl text-primary-blue mb-3 md:mb-4 block"></i>
+                                        <span class="block text-[10px] md:text-xs font-black uppercase text-gray-800">Business Loan</span>
                                     </div>
                                 </label>
                             </div>

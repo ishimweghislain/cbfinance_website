@@ -8,6 +8,49 @@ include 'config/database.php';
              /* Add these styles to the existing style section */
 body {
     font-size: 12px !important;
+    overflow-x: hidden;
+}
+
+/* Sidebar Fixes */
+#sidebar {
+    position: fixed !important;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 100 !important;
+    padding: 0 !important;
+    height: 100vh !important;
+    overflow-y: auto !important;
+}
+
+/* Custom scrollbar for sidebar */
+#sidebar::-webkit-scrollbar {
+    width: 4px;
+}
+#sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.2);
+}
+
+/* Main content wrapper to prevent overlap */
+.main-wrapper {
+    margin-left: 16.666667%; /* col-lg-2 */
+}
+
+@media (max-width: 991.98px) {
+    .main-wrapper {
+        margin-left: 25%; /* col-md-3 */
+    }
+}
+
+@media (max-width: 767.98px) {
+    #sidebar {
+        position: static !important;
+        height: auto !important;
+        width: 100% !important;
+    }
+    .main-wrapper {
+        margin-left: 0 !important;
+    }
 }
 
 .card {
@@ -304,7 +347,7 @@ p, .form-label, .small {
             <?php include 'includes/sidebar.php'; ?>
             
             <!-- Main Content -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-wrapper">
                 <?php 
                 // Modify header.php to include user info
                 include 'includes/header.php'; 

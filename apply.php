@@ -11,6 +11,8 @@ $conn = getWebsiteConnection();
 
 // Initial track email if coming from URL
 $track_url_email = isset($_GET['track_email']) ? trim($_GET['track_email']) : '';
+$track_url_nid   = isset($_GET['track_nid'])   ? trim($_GET['track_nid'])   : '';
+$nid_step        = !empty($track_url_email) && empty($track_url_nid) && !isset($_GET['reapply']); // Show NID field if email given but not NID yet
 
 // 1. HANDLE RE-APPLY (RESET TRACKING TO SHOW FORM)
 if (isset($_GET['reapply']) && $_GET['reapply'] == 'true' && !empty($track_url_email)) {
@@ -146,17 +148,29 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
     }
 }
 
-// 4. HANDLE TRACKING SEARCH
+// 4. HANDLE TRACKING SEARCH (Two-step: email + national ID)
 if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($_POST['submit_correction'])) {
-    if ($conn) {
-        $res = $conn->query("SELECT * FROM customers WHERE email = '" . $conn->real_escape_string($track_url_email) . "' ORDER BY created_at DESC LIMIT 1");
+    if ($conn && !empty($track_url_nid)) {
+        // Both email and NID provided — verify together
+        $safe_email = $conn->real_escape_string($track_url_email);
+        $safe_nid   = $conn->real_escape_string($track_url_nid);
+        $res = $conn->query("SELECT * FROM customers WHERE email = '$safe_email' AND id_number = '$safe_nid' ORDER BY created_at DESC LIMIT 1");
         if ($res && $res->num_rows > 0) {
             $found_customer = $res->fetch_assoc();
             $success = "found";
-        } elseif(!isset($_GET['reapply'])) {
-            $error = "No application found for this email.";
+            $nid_step = false;
+        } elseif (!isset($_GET['reapply'])) {
+            // Check if email alone exists (don't reveal which field failed for security)
+            $email_check = $conn->query("SELECT customer_id FROM customers WHERE email = '$safe_email' LIMIT 1");
+            if ($email_check && $email_check->num_rows > 0) {
+                $error = "Verification failed. The National ID does not match our records for this email.";
+            } else {
+                $error = "No application found for this email.";
+            }
+            $nid_step = false;
         }
     }
+    // If only email given ($nid_step = true), we just show the NID input — no DB query yet
 }
 ?>
 
@@ -165,12 +179,29 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
         
         <!-- TRACKING BAR -->
         <div class="mb-12 flex justify-end">
-            <form action="" method="GET" class="flex p-2 glass-panel rounded-2xl border border-white/20 shadow-2xl">
-                <input type="email" name="track_email" placeholder="Track existing application..." required 
-                       class="bg-white/95 rounded-xl px-5 py-3 text-xs text-black outline-none w-64 font-bold border-0 shadow-inner" 
-                       value="<?php echo htmlspecialchars($track_url_email); ?>">
-                <button type="submit" class="bg-primary-blue hover:bg-blue-600 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ml-2 shadow-lg">Track</button>
-            </form>
+            <?php if ($nid_step): ?>
+                <!-- Step 2: NID verification -->
+                <form action="" method="GET" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 glass-panel rounded-2xl border border-white/20 shadow-2xl">
+                    <input type="hidden" name="track_email" value="<?php echo htmlspecialchars($track_url_email); ?>">
+                    <div class="flex flex-col">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-white/70 mb-1 pl-1">Verify your identity</span>
+                        <input type="text" name="track_nid" placeholder="Enter your 16-digit National ID" required maxlength="16" pattern="[0-9]{16}"
+                               class="bg-white/95 rounded-xl px-5 py-3 text-xs text-black outline-none w-72 font-bold border-0 shadow-inner">
+                    </div>
+                    <button type="submit" class="bg-primary-green hover:bg-green-600 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg">
+                        <i class="fas fa-shield-alt mr-1"></i> Verify
+                    </button>
+                    <a href="apply.php" class="bg-white/20 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg text-center">Cancel</a>
+                </form>
+            <?php else: ?>
+                <!-- Step 1: Email -->
+                <form action="" method="GET" class="flex p-2 glass-panel rounded-2xl border border-white/20 shadow-2xl">
+                    <input type="email" name="track_email" placeholder="Track existing application..." required
+                           class="bg-white/95 rounded-xl px-5 py-3 text-xs text-black outline-none w-64 font-bold border-0 shadow-inner"
+                           value="<?php echo htmlspecialchars($track_url_email); ?>">
+                    <button type="submit" class="bg-primary-blue hover:bg-blue-600 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ml-2 shadow-lg">Track</button>
+                </form>
+            <?php endif; ?>      
         </div>
 
         <?php if ($success === "found" && isset($found_customer)): ?>

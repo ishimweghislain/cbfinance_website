@@ -34,7 +34,7 @@
             background: url('https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=2000') no-repeat center center;
             background-size: cover;
             position: relative;
-            display: none; /* Hidden on mobile */
+            display: none; 
         }
         @media (min-width: 992px) {
             .login-side-image { display: block; }

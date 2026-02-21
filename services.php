@@ -45,55 +45,7 @@
     </div>
 </section>
 
-<!-- Fee Structure -->
-<section class="py-24 bg-gray-50">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="bg-white rounded-[3rem] shadow-xl overflow-hidden">
-            <div class="bg-[#1A1F2E] p-10 text-center">
-                <h3 class="text-2xl font-bold text-white">Transparent Pricing</h3>
-                <p class="text-gray-400 mt-2">No hidden costs. Simple and fair rates for everyone.</p>
-            </div>
-            
-            <div class="p-10">
-                <div class="space-y-6">
-                    <!-- Interest Rate -->
-                  
 
-                    <!-- Application Fee -->
-                    <div class="flex items-center justify-between p-6 bg-green-50 rounded-2xl border border-green-100">
-                        <div>
-                            <span class="block font-bold text-primary-green uppercase text-xs tracking-widest mb-1">Application Fee</span>
-                            <span class="text-gray-700 font-medium">This is an application fee</span>
-                        </div>
-                        <div class="text-2xl font-black text-primary-green text-right">
-                            10,000 - 15,000 <br>
-                            <small class="text-[10px] uppercase tracking-tighter text-gray-400">RWF (One-time)</small>
-                        </div>
-                    </div>
-  <div class="flex items-center justify-between p-6 bg-blue-50 rounded-2xl border border-blue-100">
-                        <div>
-                            <span class="block font-bold text-primary-blue uppercase text-xs tracking-widest mb-1">Interest Rate</span>
-                            <span class="text-gray-700 font-medium">On reducing balance/Month</span>
-                        </div>
-                        <div class="text-3xl font-black text-primary-blue">5%</div>
-                    </div>
-                    <!-- Commission -->
-                    <div class="flex items-center justify-between p-6 bg-gray-50 rounded-2xl border border-gray-100">
-                        <div>
-                            <span class="block font-bold text-gray-400 uppercase text-xs tracking-widest mb-1">Management Fees</span>
-                            <span class="text-gray-600 font-medium"> Per month.</span>
-                        </div>
-                        <div class="text-2xl font-black text-gray-700">5.5%</div>
-                    </div>
-                </div>
-
-                <div class="mt-10 text-center">
-                    <p class="text-sm text-gray-400">Note: Terms and conditions apply to all loan products.</p>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
 
 <?php include 'includes/bottom_nav.php'; ?>
 <?php include 'includes/footer.php'; ?>

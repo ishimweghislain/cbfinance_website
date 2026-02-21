@@ -27,10 +27,6 @@
             </div>
             
             <div class="space-y-8">
-                <div class="bg-gray-50 p-6 rounded-3xl flex items-center justify-between">
-                    <span class="font-bold text-gray-700">Application Fee</span>
-                    <span class="bg-white px-4 py-2 rounded-xl text-primary-green font-black shadow-sm">10,000 - 15,000 RWF</span>
-                </div>
 
                 <div class="space-y-5">
                     <h4 class="font-black text-gray-800 uppercase tracking-widest text-xs border-l-4 border-primary-green pl-3">Mandatory Documentation:</h4>
@@ -73,10 +69,6 @@
             </div>
             
             <div class="space-y-8">
-                <div class="bg-gray-50 p-6 rounded-3xl flex items-center justify-between">
-                    <span class="font-bold text-gray-700">Application Fee</span>
-                    <span class="bg-white px-4 py-2 rounded-xl text-primary-blue font-black shadow-sm">10,000 - 15,000 RWF</span>
-                </div>
 
                 <div class="space-y-5">
                     <h4 class="font-black text-gray-800 uppercase tracking-widest text-xs border-l-4 border-primary-blue pl-3">Mandatory Documentation:</h4>
@@ -103,39 +95,7 @@
     </div>
 </section>
 
-<!-- Tariff Section -->
-<section class="py-24 bg-[#1A1F2E] text-white relative overflow-hidden">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-        <h3 class="text-4xl font-black mb-12 uppercase tracking-tighter">Tariff & Rates</h3>
-        
-        <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[3rem] p-12 hover:bg-white/[0.08] transition-all">
-            <div class="flex flex-col md:flex-row items-center justify-around gap-12">
-                <div class="text-center">
-                    <span class="block text-gray-400 font-bold uppercase tracking-widest text-xs mb-3">Interest Rate</span>
-                    <span class="text-6xl font-black text-primary-green">5%</span>
-                    <p class="text-blue-100/60 text-xs mt-2 uppercase">Monthly Reducing Balance</p>
-                </div>
-                <div class="w-[1px] h-20 bg-white/10 hidden md:block"></div>
-                <div class="text-center">
-                    <span class="block text-gray-400 font-bold uppercase tracking-widest text-xs mb-3">Commission</span>
-                    <span class="text-6xl font-black text-primary-light">5.5%</span>
-                    <p class="text-blue-100/60 text-xs mt-2 uppercase">Processing Fee</p>
-                </div>
-            </div>
-            
-            <div class="mt-16 pt-8 border-t border-white/5 grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
-                <div class="flex items-center gap-4">
-                    <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-primary-green"><i class="fas fa-shield-alt"></i></div>
-                    <p class="text-xs text-gray-400">Zero hidden management fees compared to market standards.</p>
-                </div>
-                <div class="flex items-center gap-4">
-                    <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-primary-light"><i class="fas fa-bolt"></i></div>
-                    <p class="text-xs text-gray-400">Fast approval within 48 hours of document verification.</p>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
+
 
 <?php include 'includes/bottom_nav.php'; ?>
 <?php include 'includes/footer.php'; ?>

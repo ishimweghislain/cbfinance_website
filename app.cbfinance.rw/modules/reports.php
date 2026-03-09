@@ -43,8 +43,9 @@ if ($export_format === 'csv') {
 function buildPortfolioQuery($conn, $sd, $ed, $cf, $sf) {
     $sd = mysqli_real_escape_string($conn, $sd);
     $ed = mysqli_real_escape_string($conn, $ed);
-    $w  = ["lp.created_at BETWEEN '{$sd} 00:00:00' AND '{$ed} 23:59:59'"];
+    $w  = ["lp.disbursement_date BETWEEN '{$sd}' AND '{$ed}'"];
     if ($cf) $w[] = "lp.customer_id = " . intval($cf);
+
     if ($sf && $sf !== 'all') $w[] = "lp.loan_status = '" . mysqli_real_escape_string($conn, $sf) . "'";
     $wc = implode(' AND ', $w);
     return "SELECT lp.*, c.customer_name, c.customer_code, c.phone, c.email, c.address,
@@ -59,8 +60,9 @@ function buildPortfolioQuery($conn, $sd, $ed, $cf, $sf) {
 function buildInstalmentsQuery($conn, $sd, $ed, $cf, $sf) {
     $sd = mysqli_real_escape_string($conn, $sd);
     $ed = mysqli_real_escape_string($conn, $ed);
-    $w  = ["li.created_at BETWEEN '{$sd} 00:00:00' AND '{$ed} 23:59:59'"];
+    $w  = ["li.due_date BETWEEN '{$sd}' AND '{$ed}'"];
     if ($cf) $w[] = "lp.customer_id = " . intval($cf);
+
     if ($sf && $sf !== 'all') {
         if ($sf === 'paid')        $w[] = "li.payment_date IS NOT NULL";
         elseif ($sf === 'unpaid')  $w[] = "li.payment_date IS NULL";
@@ -88,8 +90,9 @@ function buildCustomersQuery($conn, $sd, $ed) {
 function buildOverdueQuery($conn, $sd, $ed, $cf) {
     $sd = mysqli_real_escape_string($conn, $sd);
     $ed = mysqli_real_escape_string($conn, $ed);
-    $w  = ["li.days_overdue > 0"];
+    $w  = ["li.days_overdue > 0", "li.due_date BETWEEN '{$sd}' AND '{$ed}'"];
     if ($cf) $w[] = "lp.customer_id = " . intval($cf);
+
     $wc = implode(' AND ', $w);
     return "SELECT li.*, lp.loan_number, lp.interest_rate, lp.loan_status, lp.collateral_net_value,
         c.customer_name, c.customer_code, c.phone,
@@ -165,7 +168,8 @@ function buildSummaryQuery($conn, $sd, $ed) {
         AVG(lp.interest_rate) as avg_interest_rate,
         SUM(COALESCE(lp.collateral_net_value,0)) as total_collateral_value
         FROM loan_portfolio lp
-        WHERE lp.created_at BETWEEN '{$sd} 00:00:00' AND '{$ed} 23:59:59'";
+        WHERE lp.disbursement_date BETWEEN '{$sd}' AND '{$ed}'";
+
 }
 
 // ─── CSV GENERATOR ───────────────────────────────────────────────────────────
@@ -424,8 +428,9 @@ $stats = $conn->query(
     "SELECT COUNT(*) as total_loans, SUM(total_disbursed) as total_disbursed,
      SUM(total_outstanding) as total_outstanding, SUM(total_paid) as total_paid
      FROM loan_portfolio
-     WHERE created_at BETWEEN '{$sd_esc} 00:00:00' AND '{$ed_esc} 23:59:59'"
+     WHERE disbursement_date BETWEEN '{$sd_esc}' AND '{$ed_esc}'"
 )->fetch_assoc();
+
 ?>
 <!DOCTYPE html>
 <html lang="en">

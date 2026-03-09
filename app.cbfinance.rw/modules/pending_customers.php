@@ -148,3 +148,4 @@ if (!empty($params)) {
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 </style>
 <?php if (isset($conn)) $conn->close(); ?>
+

@@ -663,7 +663,9 @@ if (isset($_POST['save_journal_entry'])) {
                     recalculateAccountEndingBalances($conn, $account_code);
                 }
                 
-                if (session_status() === PHP_SESSION_NONE) session_start();
+                if (session_status() === PHP_SESSION_NONE) if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
                 $_SESSION['success_message'] = "Journal entry saved successfully! Voucher: $voucher_number";
                 
                 echo "<script>window.location.href='?page=ledger'</script>";
@@ -675,7 +677,9 @@ if (isset($_POST['save_journal_entry'])) {
             $error_message = "Transaction failed: " . $e->getMessage();
             error_log("Transaction rolled back: " . $error_message);
             
-            if (session_status() === PHP_SESSION_NONE) session_start();
+            if (session_status() === PHP_SESSION_NONE) if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
             $_SESSION['error_message'] = $error_message;
             
             echo "<script>window.location.href='?page=ledger'</script>";
@@ -686,7 +690,9 @@ if (isset($_POST['save_journal_entry'])) {
         $error_message = implode("<br>", $errors);
         error_log("Validation errors: " . $error_message);
         
-        if (session_status() === PHP_SESSION_NONE) session_start();
+        if (session_status() === PHP_SESSION_NONE) if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
         $_SESSION['error_message'] = $error_message;
         $_SESSION['form_data']     = $_POST;
         

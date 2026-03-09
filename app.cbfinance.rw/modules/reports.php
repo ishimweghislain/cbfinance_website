@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../config/database.php';
 $conn = getConnection();
 
-// Date range is primary
+$report_type     = $_GET['report_type']   ?? 'portfolio';
 $start_date      = $_GET['start_date']    ?? date('Y-m-01'); 
 $end_date        = $_GET['end_date']      ?? date('Y-m-d');
 $customer_filter = $_GET['customer_id']   ?? '';

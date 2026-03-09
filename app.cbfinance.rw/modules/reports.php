@@ -2,23 +2,13 @@
 require_once __DIR__ . '/../config/database.php';
 $conn = getConnection();
 
-$report_type     = $_GET['report_type']   ?? 'portfolio';
-$start_date      = $_GET['start_date']    ?? date('Y-m-01'); // Default to first of month
+// Date range is primary
+$start_date      = $_GET['start_date']    ?? date('Y-m-01'); 
 $end_date        = $_GET['end_date']      ?? date('Y-m-d');
 $customer_filter = $_GET['customer_id']   ?? '';
 $status_filter   = $_GET['status_filter'] ?? '';
 $export_format   = $_GET['export_format'] ?? '';
 
-// Handle Single Month selection if provided
-if (isset($_GET['selected_month']) && !empty($_GET['selected_month'])) {
-    $month_parts = explode('-', $_GET['selected_month']);
-    if (count($month_parts) === 2) {
-        $year = $month_parts[0];
-        $month = $month_parts[1];
-        $start_date = "{$year}-{$month}-01";
-        $end_date = date('Y-m-t', strtotime($start_date));
-    }
-}
 
 
 // ─── CSV EXPORT — MUST RUN BEFORE ANY HTML OUTPUT ────────────────────────────
@@ -545,22 +535,19 @@ $stats = $conn->query(
                     </div>
                 </div>
 
-                <!-- Monthly Selection & Action Buttons -->
-                <div class="row mt-3 align-items-end">
                     <div class="col-md-3">
-                        <label class="form-label fw-semibold">Download Specific Month Only</label>
+                        <label class="form-label fw-semibold">Quick Month Selection</label>
                         <div class="input-group">
-                            <input type="month" name="selected_month" id="selectedMonth" class="form-control" 
+                            <input type="month" id="selectedMonth" class="form-control" 
+                                   onchange="applyMonthMacro(this.value)"
                                    value="<?= date('Y-m', strtotime($start_date)) ?>">
-                            <button type="button" class="btn btn-primary" onclick="downloadMonthly()">
-                                <i class="bi bi-download me-1"></i> Month CSV
-                            </button>
                         </div>
                     </div>
                     <div class="col-md-9 d-flex align-items-center gap-3">
                         <button type="button" class="btn btn-success btn-lg px-4" onclick="downloadCsv()">
-                            <i class="bi bi-filetype-csv me-2"></i>Download All Selected Data
+                            <i class="bi bi-filetype-csv me-2"></i>Download Excel Report
                         </button>
+
                         <div id="dateErrorMessage" class="text-danger small d-none">
                             <i class="bi bi-exclamation-circle me-1"></i> Invalid date range selected!
                         </div>
@@ -649,17 +636,29 @@ function validateDates() {
     return true;
 }
 
+function applyMonthMacro(val) {
+    if (!val) return;
+    const parts = val.split('-');
+    const y = parseInt(parts[0]);
+    const m = parseInt(parts[1]);
+    
+    // Set start to 1st of that month
+    const start = new Date(y, m - 1, 1);
+    // Set end to last day of that month
+    const end = new Date(y, m, 0);
+    
+    document.getElementById('startDate').value = fmt(start);
+    document.getElementById('endDate').value = fmt(end);
+    
+    validateAndTrigger();
+}
+
 function validateAndTrigger() {
     if (validateDates()) {
         const form = document.getElementById('reportForm');
         // Prevent immediate download during auto-trigger
         const format = form.querySelector('input[name="export_format"]');
         if (format) format.remove();
-        
-        // Remove monthly selection when range is modified manually
-        const m = document.getElementById('selectedMonth');
-        if (m) m.value = "";
-        
         form.submit();
     }
 }
@@ -679,26 +678,6 @@ function downloadCsv() {
     form.submit();
 }
 
-function downloadMonthly() {
-    const m = document.getElementById('selectedMonth').value;
-    if (!m) {
-        alert("Please select a month first.");
-        return;
-    }
-    
-    const form = document.getElementById('reportForm');
-    
-    // Add export format
-    let existingExport = form.querySelector('input[name="export_format"]');
-    if (existingExport) existingExport.remove();
-    const inpExport = document.createElement('input');
-    inpExport.type  = 'hidden';
-    inpExport.name  = 'export_format';
-    inpExport.value = 'csv';
-    form.appendChild(inpExport);
-    
-    form.submit();
-}
 
 
 function selectReport(type) {

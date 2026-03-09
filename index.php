@@ -16,7 +16,7 @@
                 <i class="fas fa-chart-line mr-2"></i> Trusted Financial Partner
             </span>
             <h1 class="text-5xl md:text-7xl font-bold leading-tight mb-6">
-                Empowering Your <br>
+                Testing Your <br>
                 <span class="text-primary-green">Financial Journey</span>
             </h1>
             <p class="text-xl text-gray-200 mb-10 leading-relaxed">

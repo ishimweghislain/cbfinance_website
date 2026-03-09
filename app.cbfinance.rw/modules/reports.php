@@ -3,11 +3,23 @@ require_once __DIR__ . '/../config/database.php';
 $conn = getConnection();
 
 $report_type     = $_GET['report_type']   ?? 'portfolio';
-$start_date      = $_GET['start_date']    ?? date('Y-m-d', strtotime('-30 days'));
+$start_date      = $_GET['start_date']    ?? date('Y-m-01'); // Default to first of month
 $end_date        = $_GET['end_date']      ?? date('Y-m-d');
 $customer_filter = $_GET['customer_id']   ?? '';
 $status_filter   = $_GET['status_filter'] ?? '';
 $export_format   = $_GET['export_format'] ?? '';
+
+// Handle Single Month selection if provided
+if (isset($_GET['selected_month']) && !empty($_GET['selected_month'])) {
+    $month_parts = explode('-', $_GET['selected_month']);
+    if (count($month_parts) === 2) {
+        $year = $month_parts[0];
+        $month = $month_parts[1];
+        $start_date = "{$year}-{$month}-01";
+        $end_date = date('Y-m-t', strtotime($start_date));
+    }
+}
+
 
 // ─── CSV EXPORT — MUST RUN BEFORE ANY HTML OUTPUT ────────────────────────────
 if ($export_format === 'csv') {
@@ -494,14 +506,17 @@ $stats = $conn->query(
                     </div>
                     <div class="col-md-2">
                         <label class="form-label fw-semibold">Start Date</label>
-                        <input type="date" class="form-control" name="start_date"
+                        <input type="date" class="form-control" name="start_date" id="startDate"
+                               onchange="validateAndTrigger()"
                                value="<?= htmlspecialchars($start_date) ?>" required>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label fw-semibold">End Date</label>
-                        <input type="date" class="form-control" name="end_date"
+                        <input type="date" class="form-control" name="end_date" id="endDate"
+                               onchange="validateAndTrigger()"
                                value="<?= htmlspecialchars($end_date) ?>" required>
                     </div>
+
                     <div class="col-md-2">
                         <label class="form-label fw-semibold">Customer</label>
                         <select name="customer_id" class="form-select">
@@ -527,27 +542,31 @@ $stats = $conn->query(
                             <option value="unpaid"    <?= $status_filter=='unpaid'   ?'selected':'' ?>>Unpaid (Instalments)</option>
                         </select>
                     </div>
-                    <div class="col-md-1">
-                        <label class="form-label">&nbsp;</label>
-                        <button type="button" class="btn btn-outline-secondary w-100"
-                                title="Reset filters"
-                                onclick="window.location.href='?page=reports'">
-                            <i class="bi bi-arrow-clockwise"></i>
-                        </button>
                     </div>
                 </div>
 
-                <div class="row mt-4">
-                    <div class="col-12 d-flex align-items-center gap-3">
+                <!-- Monthly Selection & Action Buttons -->
+                <div class="row mt-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Download Specific Month Only</label>
+                        <div class="input-group">
+                            <input type="month" name="selected_month" id="selectedMonth" class="form-control" 
+                                   value="<?= date('Y-m', strtotime($start_date)) ?>">
+                            <button type="button" class="btn btn-primary" onclick="downloadMonthly()">
+                                <i class="bi bi-download me-1"></i> Month CSV
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-9 d-flex align-items-center gap-3">
                         <button type="button" class="btn btn-success btn-lg px-4" onclick="downloadCsv()">
-                            <i class="bi bi-filetype-csv me-2"></i>Download excel Report
+                            <i class="bi bi-filetype-csv me-2"></i>Download All Selected Data
                         </button>
-                        <span class="text-muted small">
-                            <i class="bi bi-info-circle me-1"></i>
-                            Downloads a .csv file — opens in Excel, LibreOffice, and Google Sheets.
-                        </span>
+                        <div id="dateErrorMessage" class="text-danger small d-none">
+                            <i class="bi bi-exclamation-circle me-1"></i> Invalid date range selected!
+                        </div>
                     </div>
                 </div>
+
             </form>
 
             <!-- Quick Timeframes -->
@@ -599,9 +618,57 @@ $stats = $conn->query(
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+function validateDates() {
+    const s = document.getElementById('startDate').value;
+    const e = document.getElementById('endDate').value;
+    const err = document.getElementById('dateErrorMessage');
+    
+    if (!s || !e) return false;
+    
+    const start = new Date(s);
+    const end = new Date(e);
+    const today = new Date();
+    today.setHours(23,59,59,999);
+    
+    // Rule: Start must be before or equal to End
+    if (start > end) {
+        err.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i> Start date cannot be after end date!';
+        err.classList.remove('d-none');
+        return false;
+    }
+    
+    // User mentioned "between tomorrow and yesterday" as an example of false dates
+    // Usually reports don't include tomorrow
+    if (start > today) {
+        err.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i> Future dates not allowed for generated reports!';
+        err.classList.remove('d-none');
+        return false;
+    }
+
+    err.classList.add('d-none');
+    return true;
+}
+
+function validateAndTrigger() {
+    if (validateDates()) {
+        const form = document.getElementById('reportForm');
+        // Prevent immediate download during auto-trigger
+        const format = form.querySelector('input[name="export_format"]');
+        if (format) format.remove();
+        
+        // Remove monthly selection when range is modified manually
+        const m = document.getElementById('selectedMonth');
+        if (m) m.value = "";
+        
+        form.submit();
+    }
+}
+
 function downloadCsv() {
+    if (!validateDates()) return;
+    
     const form = document.getElementById('reportForm');
-    const existing = form.querySelector('input[name="export_format"]');
+    let existing = form.querySelector('input[name="export_format"]');
     if (existing) existing.remove();
 
     const inp = document.createElement('input');
@@ -611,6 +678,28 @@ function downloadCsv() {
     form.appendChild(inp);
     form.submit();
 }
+
+function downloadMonthly() {
+    const m = document.getElementById('selectedMonth').value;
+    if (!m) {
+        alert("Please select a month first.");
+        return;
+    }
+    
+    const form = document.getElementById('reportForm');
+    
+    // Add export format
+    let existingExport = form.querySelector('input[name="export_format"]');
+    if (existingExport) existingExport.remove();
+    const inpExport = document.createElement('input');
+    inpExport.type  = 'hidden';
+    inpExport.name  = 'export_format';
+    inpExport.value = 'csv';
+    form.appendChild(inpExport);
+    
+    form.submit();
+}
+
 
 function selectReport(type) {
     document.getElementById('reportTypeSelect').value = type;

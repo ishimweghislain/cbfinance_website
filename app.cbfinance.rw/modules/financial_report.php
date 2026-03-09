@@ -786,17 +786,20 @@ if (strtotime($start_date) > strtotime($end_date)) {
                         
                         <div class="col-md-3">
                             <label class="form-label">Start Date</label>
-                            <input type="date" class="form-control" name="start_date" 
+                            <input type="date" class="form-control" name="start_date" id="finStartDate"
+                                   onchange="this.form.submit()"
                                    value="<?php echo htmlspecialchars($start_date); ?>" required>
                         </div>
                         
                         <div class="col-md-3">
                             <label class="form-label">End Date</label>
-                            <input type="date" class="form-control" name="end_date" 
+                            <input type="date" class="form-control" name="end_date" id="finEndDate"
+                                   onchange="this.form.submit()"
                                    value="<?php echo htmlspecialchars($end_date); ?>" required>
                         </div>
                         
                         <div class="col-md-3 d-flex align-items-end">
+
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-filter"></i> Apply Filter
                             </button>

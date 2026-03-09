@@ -157,12 +157,17 @@ if ($report_type == 'overdue') {
                             </div>
                             <div class="col-md-3">
                                 <label>Start Date</label>
-                                <input type="date" name="start_date" class="form-control" value="<?php echo $start_date; ?>">
+                                <input type="date" name="start_date" class="form-control" 
+                                       onchange="this.form.submit()"
+                                       value="<?php echo $start_date; ?>">
                             </div>
                             <div class="col-md-3">
                                 <label>End Date</label>
-                                <input type="date" name="end_date" class="form-control" value="<?php echo $end_date; ?>">
+                                <input type="date" name="end_date" class="form-control" 
+                                       onchange="this.form.submit()"
+                                       value="<?php echo $end_date; ?>">
                             </div>
+
                             <div class="col-md-3">
                                 <label>Status Filter</label>
                                 <select name="status" class="form-select">

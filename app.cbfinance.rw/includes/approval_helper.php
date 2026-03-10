@@ -160,38 +160,252 @@ function executeApproval($conn, $approval) {
 
         // ── LOAN: ADD ────────────────────────────────────────────────────────
         case 'loan.add': {
-            // Store the full POST data as JSON — forward it back to the loan insert logic
-            // We store the loan data and insert it into loan_portfolio
             $d = $data;
+            $topup_type_sql = (isset($d['topup_type']) && $d['topup_type'] !== null)
+                ? "'" . $conn->real_escape_string($d['topup_type']) . "'"
+                : "NULL";
+
             $sql = "INSERT INTO loan_portfolio (
-                loan_number, customer_id, loan_type, disbursement_amount, disbursement_date,
-                interest_rate, loan_term, loan_term_unit, loan_status, loan_purpose,
-                monitoring_fee_rate, application_fee, created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())";
-            $stmt = $conn->prepare($sql);
-            if (!$stmt) throw new Exception($conn->error);
-            $stmt->bind_param('sisdsddsssddi',
-                $d['loan_number'], (int)$d['customer_id'], $d['loan_type'],
-                (float)$d['disbursement_amount'], $d['disbursement_date'],
-                (float)$d['interest_rate'], (float)$d['loan_term'], $d['loan_term_unit'],
-                $d['loan_status'] ?? 'Pending', $d['loan_purpose'] ?? '',
-                (float)($d['monitoring_fee_rate'] ?? 0),
-                (int)($d['application_fee'] ?? 0)
+                customer_id, loan_number, loan_amount, 
+                management_fee_rate, management_fee_amount, total_disbursed,
+                interest_rate, number_of_instalments,
+                disbursement_date, maturity_date,
+                total_interest, total_management_fees, total_payment, monthly_payment,
+                principal_outstanding, interest_outstanding, total_outstanding,
+                cash_amount, bank_amount,
+                collateral_type, collateral_description,
+                collateral_value, collateral_net_value,
+                provisional_rate, general_provision, net_book_value,
+                accrued_days, loan_status,
+                is_topup, topup_type,
+                created_by, created_at, updated_at,
+                deduct_fee_from_disbursed
+            ) VALUES (
+                " . intval($d['customer_id']) . ",
+                '" . $conn->real_escape_string($d['loan_number']) . "',
+                " . floatval($d['loan_amount']) . ",
+                " . floatval($d['management_fee_rate']) . ",
+                " . floatval($d['management_fee']) . ",
+                " . floatval($d['total_disbursed']) . ",
+                " . floatval($d['interest_rate']) . ",
+                " . intval($d['number_of_instalments']) . ",
+                '" . $conn->real_escape_string($d['disbursement_date']) . "',
+                '" . $conn->real_escape_string($d['maturity_date']) . "',
+                " . floatval($d['total_interest']) . ",
+                " . floatval($d['total_management_fees']) . ",
+                " . floatval($d['total_payment']) . ",
+                " . floatval($d['monthly_payment']) . ",
+                " . floatval($d['total_disbursed']) . ",  -- initial principal outstanding
+                " . floatval($d['total_interest']) . ",
+                " . floatval($d['total_disbursed'] + $d['total_interest']) . ",
+                " . floatval($d['cash_amount']) . ",
+                " . floatval($d['bank_amount']) . ",
+                '" . $conn->real_escape_string($d['collateral_type']) . "',
+                '" . $conn->real_escape_string($d['collateral_description']) . "',
+                " . floatval($d['collateral_value']) . ",
+                " . floatval($d['collateral_net_value']) . ",
+                1.0,  
+                " . floatval($d['total_disbursed'] * 0.01) . ", 
+                " . floatval(($d['total_disbursed'] + $d['total_interest']) - ($d['total_disbursed'] * 0.01)) . ", 
+                0, 
+                'Active',
+                " . intval($d['is_topup']) . ",
+                $topup_type_sql,
+                1,
+                NOW(),
+                NOW(),
+                " . intval($d['deduct_fee']) . "
+            )";
+            
+            if (!$conn->query($sql)) throw new Exception("Add loan failed: " . $conn->error);
+            $new_loan_id = $conn->insert_id;
+
+            // Update customer
+            $conn->query("UPDATE customers SET 
+                current_balance = current_balance + " . floatval($d['loan_amount']) . ",
+                total_loans = total_loans + " . floatval($d['loan_amount']) . ",
+                updated_at = NOW()
+                WHERE customer_id = " . intval($d['customer_id']));
+
+            // Installment schedule
+            _helper_createInstallmentSchedule(
+                $conn, $new_loan_id, $d['loan_number'], $d['disbursement_date'],
+                $d['number_of_instalments'], 1,
+                $d['total_disbursed'], $d['interest_rate'], $d['management_fee_rate'], (bool)$d['deduct_fee']
             );
-            if (!$stmt->execute()) throw new Exception($stmt->error);
-            $stmt->close();
+
+            // Transaction
+            _helper_createTransactionRecord(
+                $conn, $new_loan_id, $d['loan_number'], 'Disbursement',
+                $d['disbursement_date'], $d['total_disbursed'], "Loan disbursement", 1
+            );
+            break;
+        }
+
+        // ── LOAN: EDIT ───────────────────────────────────────────────────────
+        case 'loan.edit': {
+            $d = $data;
+            // Update loan portfolio
+            $sql = "UPDATE loan_portfolio SET
+                customer_id = " . intval($d['customer_id']) . ",
+                loan_number = '" . $conn->real_escape_string($d['loan_number']) . "',
+                loan_amount = " . floatval($d['loan_amount']) . ",
+                management_fee_rate = " . floatval($d['management_fee_rate']) . ",
+                management_fee_amount = " . floatval($d['management_fee_amount']) . ",
+                total_disbursed = " . floatval($d['total_disbursed']) . ",
+                interest_rate = " . floatval($d['interest_rate']) . ",
+                number_of_instalments = " . intval($d['number_of_instalments']) . ",
+                disbursement_date = '" . $conn->real_escape_string($d['disbursement_date']) . "',
+                maturity_date = '" . $conn->real_escape_string($d['maturity_date']) . "',
+                total_interest = " . floatval($d['total_interest']) . ",
+                total_management_fees = " . floatval($d['total_management_fees']) . ",
+                total_payment = " . floatval($d['total_payment']) . ",
+                monthly_payment = " . floatval($d['monthly_payment']) . ",
+                principal_outstanding = " . floatval($d['principal_outstanding']) . ",
+                interest_outstanding = " . floatval($d['interest_outstanding']) . ",
+                total_outstanding = " . floatval($d['total_outstanding']) . ",
+                cash_amount = " . floatval($d['cash_amount']) . ",
+                bank_amount = " . floatval($d['bank_amount']) . ",
+                collateral_type = '" . $conn->real_escape_string($d['collateral_type']) . "',
+                collateral_description = '" . $conn->real_escape_string($d['collateral_description']) . "',
+                collateral_value = " . floatval($d['collateral_value']) . ",
+                collateral_net_value = " . floatval($d['collateral_net_value']) . ",
+                provisional_rate = 1.0,
+                general_provision = " . floatval($d['general_provision']) . ",
+                net_book_value = " . floatval($d['net_book_value']) . ",
+                accrued_days = " . intval($d['accrued_days']) . ",
+                loan_status = '" . $conn->real_escape_string($d['loan_status']) . "',
+                updated_at = NOW()
+            WHERE loan_id = " . intval($entity_id);
+            
+            if (!$conn->query($sql)) throw new Exception("Edit loan failed: " . $conn->error);
+
+            // Adjust customer balances
+            if ($d['old_customer_id'] != $d['customer_id']) {
+                $conn->query("UPDATE customers SET current_balance = current_balance - " . floatval($d['old_loan_amount']) . ", total_loans = total_loans - " . floatval($d['old_loan_amount']) . " WHERE customer_id = " . intval($d['old_customer_id']));
+                $conn->query("UPDATE customers SET current_balance = current_balance + " . floatval($d['loan_amount']) . ", total_loans = total_loans + " . floatval($d['loan_amount']) . " WHERE customer_id = " . intval($d['customer_id']));
+            } else {
+                $balance_diff = $d['loan_amount'] - $d['old_loan_amount'];
+                if ($balance_diff != 0) {
+                    $conn->query("UPDATE customers SET current_balance = current_balance + " . floatval($balance_diff) . ", total_loans = total_loans + " . floatval($balance_diff) . " WHERE customer_id = " . intval($d['customer_id']));
+                }
+            }
+
+            // Always recreate the instalment schedule to ensure it's up to date
+            $conn->query("DELETE FROM loan_instalments WHERE loan_id = " . intval($entity_id));
+            _helper_createInstallmentSchedule(
+                $conn, $entity_id, $d['loan_number'], $d['disbursement_date'],
+                $d['number_of_instalments'], 1,
+                $d['total_disbursed'], $d['interest_rate'], $d['management_fee_rate'], true
+            );
+
+            // Additional update transaction
+            _helper_createTransactionRecord(
+                $conn, $entity_id, $d['loan_number'], 'Update',
+                date('Y-m-d'), $d['total_disbursed'], "Loan updated via approval", 1
+            );
             break;
         }
 
         // ── LOAN: DELETE ─────────────────────────────────────────────────────
         case 'loan.delete': {
+            // Get loan amount before deleting
+            $res = $conn->query("SELECT loan_amount, customer_id FROM loan_portfolio WHERE loan_id = $entity_id");
+            if ($res && $row = $res->fetch_assoc()) {
+                $amt = floatval($row['loan_amount']);
+                $cid = intval($row['customer_id']);
+                // Restore balance
+                $conn->query("UPDATE customers SET current_balance = current_balance - $amt, total_loans = total_loans - $amt WHERE customer_id = $cid");
+            }
+
             $conn->query("DELETE FROM loan_payments WHERE loan_id = $entity_id");
             $conn->query("DELETE FROM loan_instalments WHERE loan_id = $entity_id");
             $conn->query("DELETE FROM loan_portfolio WHERE loan_id = $entity_id");
             break;
         }
 
-        default:
-            throw new Exception("Unknown action: $entity_type.$action_type");
+    }
+}
+
+// ── ISOLATED HELPER FUNCTIONS FOR LOAN CALCULATIONS ──
+if (!function_exists('_helper_PPMT')) {
+    function _helper_PMT($rate, $nper, $pv) {
+        if ($rate == 0) return -$pv / $nper;
+        return -$pv * ($rate * pow(1 + $rate, $nper)) / (pow(1 + $rate, $nper) - 1);
+    }
+    function _helper_IPMT($rate, $period, $nper, $pv) {
+        if ($period == 1) return -$pv * $rate;
+        $pmt = _helper_PMT($rate, $nper, $pv);
+        $remaining_balance = $pv;
+        for ($i = 1; $i < $period; $i++) {
+            $interest = -$remaining_balance * $rate;
+            $principal = $pmt - $interest;
+            $remaining_balance += $principal;
+        }
+        return -$remaining_balance * $rate;
+    }
+    function _helper_PPMT($rate, $period, $nper, $pv) {
+        if ($rate == 0) return -$pv / $nper;
+        return _helper_PMT($rate, $nper, $pv) - _helper_IPMT($rate, $period, $nper, $pv);
+    }
+    function _helper_generateLoanSchedule($total_disbursed, $interest_rate, $term, $management_fee_rate = 5.5, $deduct_fee = true) {
+        $schedule = [];
+        $monthly_rate = $interest_rate / 100;
+        $management_fee_per_month = round($total_disbursed * ($management_fee_rate / 100), 2);
+        $opening_balance = $total_disbursed;
+        
+        for ($i = 1; $i <= $term; $i++) {
+            $interest = round($opening_balance * $monthly_rate, 2);
+            $principal = round(-_helper_PPMT($monthly_rate, $i, $term, $total_disbursed), 2);
+            $management_fee = ($i == 1 && $deduct_fee) ? 0 : $management_fee_per_month;
+            
+            $principal = round($principal / 10) * 10;
+            $interest = round($interest / 10) * 10;
+            $management_fee = round($management_fee / 10) * 10;
+            
+            $total_payment = $principal + $interest + $management_fee;
+            $closing_balance = max(0, $opening_balance - $principal);
+            
+            $schedule[] = [
+                'instalment_number' => $i,
+                'opening_balance' => round($opening_balance, 2),
+                'principal' => $principal,
+                'interest' => $interest,
+                'management_fee' => $management_fee,
+                'total_payment' => $total_payment,
+                'closing_balance' => round($closing_balance, 2)
+            ];
+            $opening_balance = $closing_balance;
+        }
+        return $schedule;
+    }
+    function _helper_createInstallmentSchedule($conn, $loan_id, $loan_number, $disbursement_date, $number_of_instalments, $user_id, $total_disbursed, $interest_rate, $management_fee_rate = 5.5, $deduct_fee = true) {
+        $schedule = _helper_generateLoanSchedule($total_disbursed, $interest_rate, $number_of_instalments, $management_fee_rate, $deduct_fee);
+        $disbursement_date_obj = new DateTime($disbursement_date);
+        foreach ($schedule as $inst) {
+            $i_num = $inst['instalment_number'];
+            $due_date_obj = clone $disbursement_date_obj;
+            $due_date_obj->modify("+$i_num months");
+            $due_date = $due_date_obj->format('Y-m-d');
+            
+            $conn->query("INSERT INTO loan_instalments (
+                loan_id, loan_number, instalment_number, due_date, opening_balance,
+                principal_amount, interest_amount, management_fee, total_payment, closing_balance,
+                paid_amount, principal_paid, interest_paid, management_fee_paid,
+                balance_remaining, status, days_overdue, penalty_amount, created_by, created_at
+            ) VALUES (
+                ".intval($loan_id).", '".$conn->real_escape_string($loan_number)."', $i_num, '$due_date', ".floatval($inst['opening_balance']).",
+                ".floatval($inst['principal']).", ".floatval($inst['interest']).", ".floatval($inst['management_fee']).", ".floatval($inst['total_payment']).", ".floatval($inst['closing_balance']).",
+                0, 0, 0, 0, ".floatval($inst['total_payment']).", 'Pending', 0, 0, ".intval($user_id).", NOW()
+            )");
+        }
+    }
+    function _helper_createTransactionRecord($conn, $loan_id, $loan_number, $type, $date, $amount, $description, $user_id) {
+        $conn->query("INSERT INTO loan_transactions (
+            loan_id, loan_number, transaction_type, transaction_date, amount, description, created_by, created_at
+        ) VALUES (
+            ".intval($loan_id).", '".$conn->real_escape_string($loan_number)."', '".$conn->real_escape_string($type)."', '".$conn->real_escape_string($date)."',
+            ".floatval($amount).", '".$conn->real_escape_string($description)."', ".intval($user_id).", NOW()
+        )");
     }
 }

@@ -167,27 +167,44 @@ function canSeeReports($role) {
             </li>
             <?php endif; ?>
             
-            <!-- ── Approvals (All roles — badge only for Director/MD) ── -->
-            <?php
-            $approval_conn = getConnection();
-            $pending_approvals_count = $approval_conn ? countPendingApprovals($approval_conn) : 0;
-            if ($approval_conn) $approval_conn->close();
-            ?>
+            <!-- ── Approvals (Hide for Developer) ── -->
+            <?php if ($user_role !== 'Developer'): 
+                $approval_conn = getConnection();
+                $pending_approvals_count = $approval_conn ? countPendingApprovals($approval_conn) : 0;
+                if ($approval_conn) $approval_conn->close();
+                ?>
+                <li class="nav-item">
+                    <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-white-50">
+                        <span>Approvals</span>
+                    </h6>
+                    <a class="nav-link d-flex align-items-center justify-content-between <?php echo $current_page == 'approvals' ? 'active' : ''; ?>" href="?page=approvals">
+                        <span><i class="bi bi-shield-check me-2"></i> Approval Center</span>
+                        <?php if ($pending_approvals_count > 0): ?>
+                            <span class="badge rounded-pill bg-warning text-dark" style="font-size:.68rem;min-width:20px;padding:3px 7px;">
+                                <?php echo $pending_approvals_count; ?>
+                            </span>
+                        <?php endif; ?>
+                    </a>
+                </li>
+            <?php endif; ?>
+
+            <?php if ($user_role === 'Developer'): ?>
             <li class="nav-item mt-3">
-                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-2 mb-1 text-white-50">
-                    <span>Approvals</span>
+                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-white-50">
+                    <span>Developer Tools</span>
                 </h6>
             </li>
             <li class="nav-item">
-                <a class="nav-link d-flex align-items-center justify-content-between <?php echo $current_page == 'approvals' ? 'active' : ''; ?>" href="?page=approvals">
-                    <span><i class="bi bi-shield-check me-2"></i> Approval Center</span>
-                    <?php if ($pending_approvals_count > 0): ?>
-                        <span class="badge rounded-pill bg-warning text-dark" style="font-size:.68rem;min-width:20px;padding:3px 7px;">
-                            <?php echo $pending_approvals_count; ?>
-                        </span>
-                    <?php endif; ?>
+                <a class="nav-link <?php echo $current_page == 'activity_logs' ? 'active' : ''; ?>" href="?page=activity_logs">
+                    <i class="bi bi-clock-history me-2"></i> Activity Logs
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link <?php echo $current_page == 'user_management' ? 'active' : ''; ?>" href="?page=user_management">
+                    <i class="bi bi-people me-2"></i> User Management
+                </a>
+            </li>
+            <?php endif; ?>
 
             <li class="nav-item mt-auto pt-4">
                 <a class="nav-link text-danger" href="logout.php">

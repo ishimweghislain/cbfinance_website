@@ -129,6 +129,11 @@ try {
     if ($result) {
         $stats['overdue'] = $result->fetch_assoc();
     }
+
+    // 14. Latest Activity Logs (for Developers)
+    if ($role === 'Developer') {
+        $stats['latest_logs'] = $conn->query("SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 6");
+    }
     
 } catch (Exception $e) {
     error_log("Dashboard Error: " . $e->getMessage());
@@ -367,7 +372,7 @@ try {
     <div class="row">
         
         <!-- Recent Loans -->
-        <div class="col-lg-full mb-4">
+        <div class="<?= ($role === 'Developer') ? 'col-lg-8' : 'col-lg-12' ?> mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex justify-content-between align-items-center">
                     <h6 class="m-0 fw-bold text-primary">Recent Loans</h6>
@@ -439,6 +444,48 @@ try {
                 </div>
             </div>
         </div>
+
+        <?php if ($role === 'Developer'): ?>
+        <!-- Latest Activity Logs -->
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center bg-dark text-white">
+                    <h6 class="m-0 fw-bold">Latest System Activity</h6>
+                    <a href="?page=activity_logs" class="btn btn-sm btn-outline-light">Activity Center</a>
+                </div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush small">
+                        <?php 
+                        if (isset($stats['latest_logs']) && $stats['latest_logs']->num_rows > 0):
+                            while($log = $stats['latest_logs']->fetch_assoc()):
+                                $badge = 'secondary';
+                                switch($log['action_type']) {
+                                    case 'login': $badge = 'success'; break;
+                                    case 'delete': $badge = 'danger'; break;
+                                    case 'approve': $badge = 'primary'; break;
+                                }
+                        ?>
+                        <li class="list-group-item px-3 py-2 border-0">
+                            <div class="d-flex justify-content-between">
+                                <span class="fw-bold"><?= htmlspecialchars($log['username']) ?></span>
+                                <span class="text-muted" style="font-size:0.65rem;"><?= date('H:i', strtotime($log['created_at'])) ?></span>
+                            </div>
+                            <div class="d-flex align-items-center mt-1">
+                                <span class="badge bg-<?= $badge ?> me-2" style="font-size:0.6rem;"><?= strtoupper($log['action_type']) ?></span>
+                                <span class="text-truncate" title="<?= htmlspecialchars($log['description']) ?>"><?= htmlspecialchars($log['description']) ?></span>
+                            </div>
+                        </li>
+                        <?php 
+                            endwhile;
+                        else: 
+                        ?>
+                        <li class="list-group-item text-center text-muted py-4">No recent activity</li>
+                        <?php endif; ?>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
 
     <!-- Additional Stats Row -->

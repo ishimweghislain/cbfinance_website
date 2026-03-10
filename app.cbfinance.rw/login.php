@@ -30,6 +30,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username']) && isset(
                 $_SESSION['role'] = $user['role'];
                 $_SESSION['loggedIn'] = true;
                 
+                require_once 'includes/activity_logger.php';
+                logActivity($conn, 'login', 'user', $user['user_id'], "User {$_SESSION['username']} logged in successfully.");
+
                 // Output for JS to catch and set localStorage (for backward compatibility)
                 echo "<script>
                     localStorage.setItem('authSession', JSON.stringify(" . json_encode([

@@ -38,6 +38,10 @@ function submitForApproval($conn, $action_type, $entity_type, $entity_id = null,
     );
 
     $result = $stmt->execute();
+    if ($result) {
+        require_once __DIR__ . '/activity_logger.php';
+        logActivity($conn, 'submit_approval', $entity_type, $safe_entity_id, "Submitted $action_type $entity_type for approval: $description");
+    }
     $stmt->close();
     return $result;
 }
@@ -112,6 +116,10 @@ function executeApproval($conn, $approval) {
                 $d['guarantor_phone'], $d['guarantor_occupation']
             );
             if (!$stmt->execute()) throw new Exception($stmt->error);
+            
+            require_once __DIR__ . '/activity_logger.php';
+            logActivity($conn, 'create', 'customer', $conn->insert_id, "Approved creation of customer: {$d['customer_name']}");
+            
             $stmt->close();
             break;
         }
@@ -140,6 +148,8 @@ function executeApproval($conn, $approval) {
                 $entity_id
             );
             if (!$stmt->execute()) throw new Exception($stmt->error);
+            require_once __DIR__ . '/activity_logger.php';
+            logActivity($conn, 'update', 'customer', $entity_id, "Approved update of customer: {$d['customer_name']}");
             $stmt->close();
             break;
         }
@@ -155,6 +165,8 @@ function executeApproval($conn, $approval) {
             ] as $del_sql) {
                 $conn->query($del_sql);
             }
+            require_once __DIR__ . '/activity_logger.php';
+            logActivity($conn, 'delete', 'customer', $entity_id, "Approved deletion of customer and all related data (ID: $entity_id)");
             break;
         }
 
@@ -239,6 +251,8 @@ function executeApproval($conn, $approval) {
                 $conn, $new_loan_id, $d['loan_number'], 'Disbursement',
                 $d['disbursement_date'], $d['total_disbursed'], "Loan disbursement", 1
             );
+            require_once __DIR__ . '/activity_logger.php';
+            logActivity($conn, 'create', 'loan', $new_loan_id, "Approved creation of loan: {$d['loan_number']} for customer ID: {$d['customer_id']}");
             break;
         }
 
@@ -304,6 +318,8 @@ function executeApproval($conn, $approval) {
                 $conn, $entity_id, $d['loan_number'], 'Update',
                 date('Y-m-d'), $d['total_disbursed'], "Loan updated via approval", 1
             );
+            require_once __DIR__ . '/activity_logger.php';
+            logActivity($conn, 'update', 'loan', $entity_id, "Approved update of loan: {$d['loan_number']}");
             break;
         }
 
@@ -317,10 +333,14 @@ function executeApproval($conn, $approval) {
                 // Restore balance
                 $conn->query("UPDATE customers SET current_balance = current_balance - $amt, total_loans = total_loans - $amt WHERE customer_id = $cid");
             }
-
+            
+            // Actual deletion
             $conn->query("DELETE FROM loan_payments WHERE loan_id = $entity_id");
             $conn->query("DELETE FROM loan_instalments WHERE loan_id = $entity_id");
             $conn->query("DELETE FROM loan_portfolio WHERE loan_id = $entity_id");
+
+            require_once __DIR__ . '/activity_logger.php';
+            logActivity($conn, 'delete', 'loan', $entity_id, "Approved deletion of loan ID: $entity_id");
             break;
         }
 

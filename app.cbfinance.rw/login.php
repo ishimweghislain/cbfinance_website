@@ -270,7 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username']) && isset(
                         Sign In Now <i class="bi bi-arrow-right-short ms-1"></i>
                     </button>
                     
-                    <?php if (isset($login_error)): ?>
+                    <?php if ($login_error === true): ?>
                     <div class="alert" id="errorAlert">
                         <i class="bi bi-exclamation-circle-fill me-2"></i> Invalid credentials.
                     </div>

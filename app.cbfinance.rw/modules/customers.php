@@ -135,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_customer_id'])
         $conn->query("SET FOREIGN_KEY_CHECKS = 0");
         if ($conn->query("DELETE FROM customers WHERE customer_id = $delete_id")) {
              $conn->query("SET FOREIGN_KEY_CHECKS = 1");
-             echo "<script>window.href.location='?page=customers'</script>";
+             echo "<script>window.location.href='?page=customers'</script>";
              exit();
         }
         $conn->query("SET FOREIGN_KEY_CHECKS = 1");
@@ -222,9 +222,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_customer_id'])
                                         <span class="badge cbf-badge px-2 py-1 fw-bold"><?php echo $cbf_label; ?></span>
                                     </td>
                                     <td><?php echo htmlspecialchars($customer['customer_code']); ?></td>
-                                    <td>
-                                    <td><?php echo htmlspecialchars($customer['customer_name']); ?></td>
-                                    <td>
                                     <td><?php echo htmlspecialchars($customer['customer_name']); ?></td>
                                     <td>
                                         <div class="small fw-bold"><?php echo htmlspecialchars($customer['phone']); ?></div>
@@ -251,7 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_customer_id'])
                                 </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>
-                                <tr><td colspan="6" class="text-center py-5 text-muted">No approved members found.</td></tr>
+                                <tr><td colspan="7" class="text-center py-5 text-muted">No approved members found.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>

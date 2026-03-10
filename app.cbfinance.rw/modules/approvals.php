@@ -165,18 +165,19 @@ foreach (['pending', 'approved', 'rejected'] as $s) {
                             while ($row = $approvals->fetch_assoc()):
                                 $data = is_string($row['action_data']) ? json_decode($row['action_data'], true) : [];
                                 if (!is_array($data)) $data = [];
-                                $badge = match($row['status']) {
-                                    'pending'  => 'warning',
-                                    'approved' => 'success',
-                                    'rejected' => 'danger',
-                                    default    => 'secondary'
-                                };
-                                $action_badge = match($row['action_type']) {
-                                    'add'    => '<span class="badge bg-success">ADD</span>',
-                                    'edit'   => '<span class="badge bg-primary">EDIT</span>',
-                                    'delete' => '<span class="badge bg-danger">DELETE</span>',
-                                    default  => '<span class="badge bg-secondary">'.strtoupper($row['action_type']).'</span>'
-                                };
+                                $badge = 'secondary';
+                                switch($row['status']) {
+                                    case 'pending':  $badge = 'warning'; break;
+                                    case 'approved': $badge = 'success'; break;
+                                    case 'rejected': $badge = 'danger'; break;
+                                }
+
+                                $action_badge = '<span class="badge bg-secondary">'.strtoupper($row['action_type'] ?? '').'</span>';
+                                switch($row['action_type']) {
+                                    case 'add':    $action_badge = '<span class="badge bg-success">ADD</span>'; break;
+                                    case 'edit':   $action_badge = '<span class="badge bg-primary">EDIT</span>'; break;
+                                    case 'delete': $action_badge = '<span class="badge bg-danger">DELETE</span>'; break;
+                                }
                         ?>
                         <tr>
                             <td><?= $row['approval_id'] ?></td>

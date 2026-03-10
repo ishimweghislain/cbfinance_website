@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/approval_helper.php';
 $conn = getConnection();
 
 $success_message = '';
@@ -93,164 +94,61 @@ if (isset($_POST['add_customer'])) {
                 $customer_code = 'CUST-' . date('d/m/y/H/i/s');
             }
 
-            // ── INSERT ──────────────────────────────────────────────────────
-            // 41 bound columns (record_date added)
-            $sql = "INSERT INTO customers (
-                customer_code,
-                customer_name,
-                birth_place,
-                id_number,
-                account_number,
-                occupation,
-                gender,
-                date_of_birth,
-                record_date,
-                phone,
-                email,
-                organization,
-                father_name,
-                mother_name,
-                marriage_type,
-                spouse,
-                spouse_id,
-                spouse_occupation,
-                spouse_phone,
-                address,
-                location,
-                project,
-                project_location,
-                caution_location,
-                loan_type,
-                created_by,
-                created_at,
-                updated_at,
-                is_active,
-                status,
-                doc_id,
-                doc_contract,
-                doc_statement,
-                doc_payslip,
-                doc_marital,
-                doc_rdb,
-                has_guarantor,
-                guarantor_name,
-                guarantor_id,
-                guarantor_phone,
-                guarantor_occupation
-            ) VALUES (
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, NOW(), NOW(), 1, 'Approved',
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?
-            )";
+            // ── APPROVAL WORKFLOW: Submit for approval instead of direct INSERT ──
+            $approval_data = [
+                'customer_code'       => $customer_code,
+                'customer_name'       => $customer_name,
+                'birth_place'         => $birth_place,
+                'id_number'           => $id_number,
+                'account_number'      => $account_number,
+                'occupation'          => $occupation,
+                'gender'              => $gender,
+                'date_of_birth'       => $date_of_birth,
+                'record_date'         => $record_date,
+                'phone'               => $phone,
+                'email'               => $email,
+                'organization'        => $organization,
+                'father_name'         => $father_name,
+                'mother_name'         => $mother_name,
+                'marriage_type'       => $marriage_type,
+                'spouse'              => $spouse,
+                'spouse_id'           => $spouse_id,
+                'spouse_occupation'   => $spouse_occupation,
+                'spouse_phone'        => $spouse_phone,
+                'address'             => $address,
+                'location'            => $location,
+                'project'             => $project,
+                'project_location'    => $project_location,
+                'caution_location'    => $caution_location,
+                'loan_type'           => $loan_type,
+                'created_by'          => $_SESSION['username'] ?? 'system',
+                'has_guarantor'       => $has_guarantor,
+                'guarantor_name'      => $guarantor_name,
+                'guarantor_id'        => $guarantor_id,
+                'guarantor_phone'     => $guarantor_phone,
+                'guarantor_occupation'=> $guarantor_occupation,
+            ];
 
-            $stmt = $conn->prepare($sql);
-
-            if (!$stmt) {
-                throw new Exception("Prepare failed: " . $conn->error);
-            }
-
-            // 37 bound params  (created_at, updated_at, is_active, status are literals)
-            // Columns bound:
-            //  1  customer_code
-            //  2  customer_name
-            //  3  birth_place
-            //  4  id_number
-            //  5  account_number
-            //  6  occupation
-            //  7  gender
-            //  8  date_of_birth
-            //  9  record_date        ← NEW
-            //  10 phone
-            //  11 email
-            //  12 organization
-            //  13 father_name
-            //  14 mother_name
-            //  15 marriage_type
-            //  16 spouse
-            //  17 spouse_id
-            //  18 spouse_occupation
-            //  19 spouse_phone
-            //  20 address
-            //  21 location
-            //  22 project
-            //  23 project_location
-            //  24 caution_location
-            //  25 loan_type
-            //  26 created_by
-            //  27 doc_id
-            //  28 doc_contract
-            //  29 doc_statement
-            //  30 doc_payslip
-            //  31 doc_marital
-            //  32 doc_rdb
-            //  33 has_guarantor
-            //  34 guarantor_name
-            //  35 guarantor_id
-            //  36 guarantor_phone
-            //  37 guarantor_occupation
-
-            $stmt->bind_param(
-                "sssssssssssssssssssssssssssssssssssss",
-                $customer_code,
-                $customer_name,
-                $birth_place,
-                $id_number,
-                $account_number,
-                $occupation,
-                $gender,
-                $date_of_birth,
-                $record_date,           // ✅ NEW
-                $phone,
-                $email,
-                $organization,
-                $father_name,
-                $mother_name,
-                $marriage_type,
-                $spouse,
-                $spouse_id,
-                $spouse_occupation,
-                $spouse_phone,
-                $address,
-                $location,
-                $project,
-                $project_location,
-                $caution_location,
-                $loan_type,
-                $created_by,
-                $doc_id,
-                $doc_contract,
-                $doc_statement,
-                $doc_payslip,
-                $doc_marital,
-                $doc_rdb,
-                $has_guarantor,
-                $guarantor_name,
-                $guarantor_id,
-                $guarantor_phone,
-                $guarantor_occupation
-            );
-
-            if ($stmt->execute()) {
-                $new_id = $stmt->insert_id;
-                $success_message = "Customer <strong>{$customer_name}</strong> added successfully! (ID: {$new_id}, Code: {$customer_code})";
-                $form_data = []; // clear form on success
+            if (submitForApproval($conn, 'add', 'customer', null, $approval_data, "Add new customer: $customer_name")) {
+                $success_message = "<div class='d-flex align-items-start gap-2'>
+                    <i class='bi bi-hourglass-split text-warning fs-4'></i>
+                    <div>
+                    <strong>Submitted for Approval!</strong><br>
+                    Customer <strong>{$customer_name}</strong> has been submitted and is pending approval by the Director or MD.
+                    <br><small class='text-muted'>You can track this in the Approvals section.</small>
+                    </div></div>";
+                $form_data = [];
             } else {
-                throw new Exception("Execute failed: " . $stmt->error);
+                throw new Exception("Could not submit for approval: " . $conn->error);
             }
-
-            $stmt->close();
 
         } catch (Exception $e) {
             $error_message = "Error: " . $e->getMessage();
         }
     }
 }
+
+// (old INSERT block removed — now handled by approval workflow above)
 
 // ── File upload helper ───────────────────────────────────────────────────────
 function handle_file_upload($field, $upload_dir) {

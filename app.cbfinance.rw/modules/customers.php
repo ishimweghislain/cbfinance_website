@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/approval_helper.php';
 $conn = getConnection();
 
 // Initialize messages
@@ -128,20 +129,29 @@ if ($result) {
 // Total rows — CBF-001 = last row (bottom), CBF-N = first row (top)
 $total = count($customers_array);
 
-// Handle delete
+// Handle delete — route through approval workflow
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_customer_id'])) {
     $delete_id = intval($_POST['delete_customer_id']);
     if ($delete_id > 0) {
-        $conn->query("SET FOREIGN_KEY_CHECKS = 0");
-        if ($conn->query("DELETE FROM customers WHERE customer_id = $delete_id")) {
-             $conn->query("SET FOREIGN_KEY_CHECKS = 1");
-             echo "<script>window.location.href='?page=customers'</script>";
-             exit();
+        $cust_row  = $conn->query("SELECT customer_name, customer_code FROM customers WHERE customer_id = $delete_id");
+        $cust_info = $cust_row ? $cust_row->fetch_assoc() : null;
+        $cust_name = $cust_info['customer_name'] ?? 'Customer #' . $delete_id;
+
+        $approval_data = [
+            'customer_id'   => $delete_id,
+            'customer_name' => $cust_name,
+            'customer_code' => $cust_info['customer_code'] ?? '',
+            'action_note'   => 'Permanent deletion of customer and all related records',
+        ];
+
+        if (submitForApproval($conn, 'delete', 'customer', $delete_id, $approval_data, "Delete customer: $cust_name")) {
+            $success_message = "⏳ Deletion request for <strong>$cust_name</strong> submitted for approval by Director or MD.";
+        } else {
+            $error_message = "Could not submit deletion for approval: " . $conn->error;
         }
-        $conn->query("SET FOREIGN_KEY_CHECKS = 1");
-        $error_message = "Deletion failed.";
     }
 }
+
 ?>
 
 <div class="row mb-4">

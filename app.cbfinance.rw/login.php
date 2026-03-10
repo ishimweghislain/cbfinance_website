@@ -1,5 +1,45 @@
 <?php
-// login.php
+require_once 'config/database.php';
+
+// Handle PHP side login to set session
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username']) && isset($_POST['password'])) {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+    
+    $VALID_CREDENTIALS = [
+        'admin'              => ['password' => 'newconfig@#2026', 'role' => 'Director'],
+        'admin@cbfinance.rw' => ['password' => 'newconfig@#2026', 'role' => 'Director'],
+        'director'           => ['password' => '123',             'role' => 'Director'],
+        'md'                 => ['password' => '123',             'role' => 'MD'],
+        'accountant'         => ['password' => '123',             'role' => 'Accountant'],
+        'secretary'          => ['password' => '123',             'role' => 'Secretary']
+    ];
+
+    if (isset($VALID_CREDENTIALS[$username]) && $VALID_CREDENTIALS[$username]['password'] === $password) {
+        $_SESSION['user_id'] = 1;
+        $_SESSION['username'] = $username;
+        $_SESSION['user_name'] = $VALID_CREDENTIALS[$username]['role']; // Using role as display name
+        $_SESSION['full_name'] = $VALID_CREDENTIALS[$username]['role'] . ' User'; // Default full name
+        $_SESSION['email'] = $username . '@cbfinance.rw'; // Default email
+        $_SESSION['role'] = $VALID_CREDENTIALS[$username]['role'];
+        $_SESSION['loggedIn'] = true;
+        
+        // Output for JS to catch and set localStorage (for backward compatibility with existing JS auth check)
+        echo "<script>
+            localStorage.setItem('authSession', JSON.stringify(" . json_encode([
+                'username' => $username,
+                'loggedIn' => true,
+                'timestamp' => time() * 1000,
+                'role' => $_SESSION['role']
+            ]) . "));
+            localStorage.setItem('authExpiry', 'session');
+            window.location.href = 'index.php';
+        </script>";
+        exit;
+    } else {
+        $login_error = true;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -165,7 +205,6 @@
             border: none;
             background: #fee2e2;
             color: #991b1b;
-            display: none;
             margin-top: 20px;
         }
         .shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
@@ -190,12 +229,12 @@
                     <p>Enter your details to access the portal</p>
                 </div>
                 
-                <form id="loginForm">
+                <form id="loginForm" method="POST">
                     <div class="mb-3">
                         <label class="form-label">Username / Email</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-person-fill"></i></span>
-                            <input type="text" class="form-control" id="username" placeholder="Input your username" required>
+                            <input type="text" class="form-control" name="username" id="username" placeholder="Input your username" required>
                         </div>
                     </div>
                     
@@ -203,7 +242,7 @@
                         <label class="form-label">Password</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-key-fill"></i></span>
-                            <input type="password" class="form-control" id="password" placeholder="I hope you remember your password !" required>
+                            <input type="password" class="form-control" name="password" id="password" placeholder="Input your password" required>
                         </div>
                     </div>
 
@@ -218,12 +257,19 @@
                         Sign In Now <i class="bi bi-arrow-right-short ms-1"></i>
                     </button>
                     
+                    <?php if (isset($login_error)): ?>
                     <div class="alert" id="errorAlert">
                         <i class="bi bi-exclamation-circle-fill me-2"></i> Invalid credentials.
                     </div>
+                    <script>
+                        const container = document.querySelector('.login-container');
+                        container.classList.add('shake');
+                        setTimeout(() => container.classList.remove('shake'), 400);
+                    </script>
+                    <?php endif; ?>
                 </form>
 
-                <a href="https://cbfinance.rw/index.php" class="back-link">
+                <a href="https://cbfinance.rw" class="back-link">
                     <i class="bi bi-arrow-left"></i> Back to main website
                 </a>
             </div>
@@ -231,43 +277,6 @@
     </div>
 
     <script>
-        const VALID_CREDENTIALS = {
-            'admin@cbfinance.rw': 'newconfig@#2026'
-        };
-
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            const rememberMe = document.getElementById('rememberMe').checked;
-            
-            if (VALID_CREDENTIALS[username] && VALID_CREDENTIALS[username] === password) {
-                const sessionData = {
-                    username: username,
-                    loggedIn: true,
-                    timestamp: new Date().getTime(),
-                    role: 'Administrator'
-                };
-                
-                localStorage.setItem('authSession', JSON.stringify(sessionData));
-                
-                if (rememberMe) {
-                    localStorage.setItem('authExpiry', (new Date().getTime() + (7 * 24 * 60 * 60 * 1000)).toString());
-                } else {
-                    localStorage.setItem('authExpiry', 'session');
-                }
-                
-                window.location.href = 'index.php';
-            } else {
-                const errorAlert = document.getElementById('errorAlert');
-                errorAlert.style.display = 'block';
-                const container = document.querySelector('.login-container');
-                container.classList.add('shake');
-                setTimeout(() => container.classList.remove('shake'), 400);
-            }
-        });
-
         // Check login state
         const authSession = localStorage.getItem('authSession');
         if (authSession) {

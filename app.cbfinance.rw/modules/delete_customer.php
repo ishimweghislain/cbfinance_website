@@ -1,6 +1,7 @@
 
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/approval_helper.php';
 $conn = getConnection();
 
 // Initialize messages
@@ -65,107 +66,27 @@ if (!$customers) {
     $error_message = "Failed to fetch customers: " . $conn->error;
 }
 
-// Handle delete customer request
+// Handle delete customer request — submit to approvals instead of direct delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_customer_id'])) {
     $delete_id = intval($_POST['delete_customer_id']);
-    
+
     if ($delete_id > 0) {
-        // Start transaction for cascade deletion
-        $conn->begin_transaction();
-        
-        try {
-            // First, check if customer has active loans
-            $check_loans_sql = "SELECT COUNT(*) as loan_count FROM loans WHERE customer_id = ? AND is_active = TRUE";
-            $check_stmt = $conn->prepare($check_loans_sql);
-            
-            if ($check_stmt) {
-                $check_stmt->bind_param("i", $delete_id);
-                $check_stmt->execute();
-                $check_result = $check_stmt->get_result();
-                $loan_count = $check_result->fetch_assoc()['loan_count'];
-                $check_stmt->close();
-                
-                if ($loan_count > 0) {
-                    // Customer has active loans, don't delete
-                    $conn->rollback();
-                    header("Location:?page=customers&error=has_active_loans");
-                    exit();
-                }
-            }
-            
-            // Delete related payments first
-            $delete_payments_sql = "DELETE FROM payments WHERE loan_id IN (SELECT loan_id FROM loans WHERE customer_id = ?)";
-            $delete_payments_stmt = $conn->prepare($delete_payments_sql);
-            if ($delete_payments_stmt) {
-                $delete_payments_stmt->bind_param("i", $delete_id);
-                $delete_payments_stmt->execute();
-                $delete_payments_stmt->close();
-            }
-            
-            // Delete related loan documents
-            $delete_loan_docs_sql = "DELETE FROM loan_documents WHERE loan_id IN (SELECT loan_id FROM loans WHERE customer_id = ?)";
-            $delete_loan_docs_stmt = $conn->prepare($delete_loan_docs_sql);
-            if ($delete_loan_docs_stmt) {
-                $delete_loan_docs_stmt->bind_param("i", $delete_id);
-                $delete_loan_docs_stmt->execute();
-                $delete_loan_docs_stmt->close();
-            }
-            
-            // Delete related loans
-            $delete_loans_sql = "DELETE FROM loans WHERE customer_id = ?";
-            $delete_loans_stmt = $conn->prepare($delete_loans_sql);
-            if ($delete_loans_stmt) {
-                $delete_loans_stmt->bind_param("i", $delete_id);
-                $delete_loans_stmt->execute();
-                $delete_loans_stmt->close();
-            }
-            
-            // Delete customer documents
-            $delete_docs_sql = "DELETE FROM customer_documents WHERE customer_id = ?";
-            $delete_docs_stmt = $conn->prepare($delete_docs_sql);
-            if ($delete_docs_stmt) {
-                $delete_docs_stmt->bind_param("i", $delete_id);
-                $delete_docs_stmt->execute();
-                $delete_docs_stmt->close();
-            }
-            
-            // Delete customer notes/comments
-            $delete_notes_sql = "DELETE FROM customer_notes WHERE customer_id = ?";
-            $delete_notes_stmt = $conn->prepare($delete_notes_sql);
-            if ($delete_notes_stmt) {
-                $delete_notes_stmt->bind_param("i", $delete_id);
-                $delete_notes_stmt->execute();
-                $delete_notes_stmt->close();
-            }
-            
-            // Finally, delete the customer
-            $delete_customer_sql = "DELETE FROM customers WHERE customer_id = ?";
-            $delete_customer_stmt = $conn->prepare($delete_customer_sql);
-            
-            if ($delete_customer_stmt) {
-                $delete_customer_stmt->bind_param("i", $delete_id);
-                $delete_customer_stmt->execute();
-                
-                if ($delete_customer_stmt->affected_rows > 0) {
-                    $conn->commit();
-                    header("Location: ?page=customers&delete_success=1");
-                    exit();
-                } else {
-                    $conn->rollback();
-                    header("Location: ?page=customers&error=delete_failed");
-                    exit();
-                }
-                $delete_customer_stmt->close();
-            } else {
-                $conn->rollback();
-                header("Location: ?page=customers&error=delete_failed");
-                exit();
-            }
-            
-        } catch (Exception $e) {
-            $conn->rollback();
-            header("Location: ?page=customers&error=delete_failed");
-            exit();
+        // Fetch customer name for the description
+        $cust_row = $conn->query("SELECT customer_name, customer_code FROM customers WHERE customer_id = $delete_id");
+        $cust_info = $cust_row ? $cust_row->fetch_assoc() : null;
+        $cust_name = $cust_info['customer_name'] ?? 'Customer #' . $delete_id;
+
+        $approval_data = [
+            'customer_id'   => $delete_id,
+            'customer_name' => $cust_name,
+            'customer_code' => $cust_info['customer_code'] ?? '',
+            'action_note'   => 'Permanent deletion of customer and all related records',
+        ];
+
+        if (submitForApproval($conn, 'delete', 'customer', $delete_id, $approval_data, "Delete customer: $cust_name")) {
+            $success_message = "⏳ Deletion request for <strong>$cust_name</strong> has been submitted for approval by Director or MD. The customer will only be deleted after approval.";
+        } else {
+            $error_message = "Could not submit deletion for approval: " . $conn->error;
         }
     }
 }

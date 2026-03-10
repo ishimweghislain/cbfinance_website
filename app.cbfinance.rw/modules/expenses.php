@@ -388,11 +388,10 @@ $asset_accounts_result = $conn->query("
     ORDER BY account_code
 ");
 
-// Get recent expenses for display
+// Get recent expenses for display (no users table join - users managed via session)
 $expenses_result = $conn->query("
-    SELECT e.*, u.username 
+    SELECT e.*
     FROM expenses e 
-    LEFT JOIN users u ON e.created_by = u.user_id 
     ORDER BY e.expense_date DESC, e.expense_id DESC 
     LIMIT 10
 ");

@@ -6,6 +6,7 @@ if (session_status() === PHP_SESSION_NONE) {
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/approval_helper.php';
 $conn = getConnection();
 if (!$conn) {
     die("Database connection failed: " . mysqli_connect_error());
@@ -415,104 +416,45 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 
                                 $created_by = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : 1;
                                 
-                                mysqli_begin_transaction($conn);
-                                
-                                try {
-                                    // Build topup_type SQL value (NULL or quoted string)
-                                    $topup_type_sql = ($topup_type !== null)
-                                        ? "'" . mysqli_real_escape_string($conn, $topup_type) . "'"
-                                        : "NULL";
+                                // ── APPROVAL WORKFLOW ──
+                                // Collect all loan data into an array and submit for approval
+                                $approval_data = [
+                                    'loan_number'            => $loan_number,
+                                    'customer_id'            => $customer_id,
+                                    'loan_amount'            => $loan_amount,
+                                    'total_disbursed'        => $total_disbursed,
+                                    'interest_rate'          => $interest_rate,
+                                    'management_fee_rate'    => $management_fee_rate,
+                                    'management_fee'         => $management_fee,
+                                    'number_of_instalments'  => $number_of_instalments,
+                                    'disbursement_date'      => $disbursement_date,
+                                    'maturity_date'          => $maturity_date,
+                                    'total_interest'         => $total_interest,
+                                    'total_management_fees'  => $total_management_fees,
+                                    'total_payment'          => $total_payment,
+                                    'monthly_payment'        => $monthly_payment,
+                                    'cash_amount'            => $cash_amount,
+                                    'bank_amount'            => $bank_amount,
+                                    'collateral_type'        => $collateral_type,
+                                    'collateral_description' => $collateral_description,
+                                    'collateral_value'       => $collateral_value,
+                                    'collateral_net_value'   => $collateral_net_value,
+                                    'is_topup'               => $is_topup,
+                                    'topup_type'             => $topup_type,
+                                    'deduct_fee'             => $deduct_fee ? 1 : 0,
+                                    'submitted_by'           => $_SESSION['username'] ?? 'system',
+                                ];
 
-                                    $sql = "INSERT INTO loan_portfolio (
-                                        customer_id, loan_number, loan_amount, 
-                                        management_fee_rate, management_fee_amount, total_disbursed,
-                                        interest_rate, number_of_instalments,
-                                        disbursement_date, maturity_date,
-                                        total_interest, total_management_fees, total_payment, monthly_payment,
-                                        principal_outstanding, interest_outstanding, total_outstanding,
-                                        cash_amount, bank_amount,
-                                        collateral_type, collateral_description,
-                                        collateral_value, collateral_net_value,
-                                        provisional_rate, general_provision, net_book_value,
-                                        accrued_days, loan_status,
-                                        is_topup, topup_type,
-                                        created_by, created_at, updated_at,
-                                        deduct_fee_from_disbursed
-                                    ) VALUES (
-                                        " . intval($customer_id) . ",
-                                        '" . mysqli_real_escape_string($conn, $loan_number) . "',
-                                        " . floatval($loan_amount) . ",
-                                        " . floatval($management_fee_rate) . ",
-                                        " . floatval($management_fee) . ",
-                                        " . floatval($total_disbursed) . ",
-                                        " . floatval($interest_rate) . ",
-                                        " . intval($number_of_instalments) . ",
-                                        '" . mysqli_real_escape_string($conn, $disbursement_date) . "',
-                                        '" . mysqli_real_escape_string($conn, $maturity_date) . "',
-                                        " . floatval($total_interest) . ",
-                                        " . floatval($total_management_fees) . ",
-                                        " . floatval($total_payment) . ",
-                                        " . floatval($monthly_payment) . ",
-                                        " . floatval($principal_outstanding) . ",
-                                        " . floatval($interest_outstanding) . ",
-                                        " . floatval($total_outstanding) . ",
-                                        " . floatval($cash_amount) . ",
-                                        " . floatval($bank_amount) . ",
-                                        '" . mysqli_real_escape_string($conn, $collateral_type) . "',
-                                        '" . mysqli_real_escape_string($conn, $collateral_description) . "',
-                                        " . floatval($collateral_value) . ",
-                                        " . floatval($collateral_net_value) . ",
-                                        1.0,
-                                        " . floatval($general_provision) . ",
-                                        " . floatval($net_book_value) . ",
-                                        " . intval($accrued_days) . ",
-                                        'Active',
-                                        " . intval($is_topup) . ",
-                                        $topup_type_sql,
-                                        " . intval($created_by) . ",
-                                        NOW(),
-                                        NOW(),
-                                        " . ($deduct_fee ? '1' : '0') . "
-                                    )";
-                                    
-                                    if (!mysqli_query($conn, $sql)) {
-                                        throw new Exception("Failed to add loan: " . mysqli_error($conn));
-                                    }
-                                    $loan_id = mysqli_insert_id($conn);
-                                    
-                                    $update_sql = "UPDATE customers SET
-                                        current_balance = current_balance + " . floatval($loan_amount) . ",
-                                        total_loans = total_loans + " . floatval($loan_amount) . ",
-                                        updated_at = NOW()
-                                        WHERE customer_id = " . intval($customer_id);
-                                    
-                                    if (!mysqli_query($conn, $update_sql)) {
-                                        throw new Exception("Failed to update customer balance: " . mysqli_error($conn));
-                                    }
-                                    
-                                    $instalment_success = createInstallmentSchedule(
-                                        $conn, $loan_id, $loan_number, $disbursement_date,
-                                        $number_of_instalments, $created_by,
-                                        $total_disbursed, $interest_rate, $management_fee_rate, $deduct_fee
-                                    );
-                                    
-                                    if (!$instalment_success) {
-                                        throw new Exception("Failed to create installment schedule");
-                                    }
-                                    
-                                    createTransactionRecord($conn, $loan_id, $loan_number, 'Disbursement',
-                                        $disbursement_date, $total_disbursed,
-                                        "Loan disbursement", $created_by);
-                                    
-                                    mysqli_commit($conn);
-                                    
-                                    $_SESSION['success_message'] = "Loan created successfully! Loan Number: " . htmlspecialchars($loan_number);
+                                // Get customer name for description
+                                $cname_res = $conn->query("SELECT customer_name FROM customers WHERE customer_id = " . intval($customer_id));
+                                $cname = $cname_res ? $cname_res->fetch_assoc()['customer_name'] : 'Customer #' . $customer_id;
+
+                                if (submitForApproval($conn, 'add', 'loan', null, $approval_data, "Add loan $loan_number for $cname")) {
+                                    $_SESSION['success_message'] = "⏳ Loan <strong>$loan_number</strong> submitted for approval. It will be activated once Director or MD approves.";
                                     echo "<script>window.location.href = '?page=loans';</script>";
                                     exit();
-                                } catch (Exception $e) {
-                                    mysqli_rollback($conn);
-                                    $error_message = $e->getMessage();
-                                    error_log("Loan creation error: " . $e->getMessage());
+                                } else {
+                                    $error_message = "Could not submit loan for approval: " . $conn->error;
                                 }
                             }
                         }

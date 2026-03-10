@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/approval_helper.php';
 $conn = getConnection();
 
 // Initialize messages
@@ -95,36 +96,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_customer'])) {
     if (empty($customer_name) || empty($id_number) || empty($phone)) {
         $error_message = "Name, ID Number, and Phone are required.";
     } else {
-        $conn->begin_transaction();
-        try {
-            $update_sql = "UPDATE customers SET 
-                customer_code = ?, customer_name = ?, birth_place = ?, id_number = ?, 
-                account_number = ?, occupation = ?, gender = ?, date_of_birth = ?, 
-                phone = ?, father_name = ?, mother_name = ?, spouse = ?, 
-                spouse_occupation = ?, spouse_phone = ?, marriage_type = ?, address = ?, 
-                location = ?, project = ?, project_location = ?, caution_location = ?, 
-                email = ?, organization = ?, status = ?, is_active = ?, updated_at = NOW() 
-                WHERE customer_id = ?";
-            
-            $update_stmt = $conn->prepare($update_sql);
-            $update_stmt->bind_param("ssssssssssssssssssssssiii", 
-                $customer_code, $customer_name, $birth_place, $id_number, $account_number,
-                $occupation, $gender, $date_of_birth, $phone, $father_name, $mother_name,
-                $spouse, $spouse_occupation, $spouse_phone, $marriage_type, $address,
-                $location, $project, $project_location, $caution_location, $email,
-                $organization, $status, $is_active, $customer_id
-            );
-            
-            if ($update_stmt->execute()) {
-                $conn->commit();
-                $success_message = "Customer updated successfully!";
-                $form_data['status'] = $status;
-            } else {
-                throw new Exception($update_stmt->error);
-            }
-        } catch (Exception $e) {
-            $conn->rollback();
-            $error_message = "Update failed: " . $e->getMessage();
+        // ── APPROVAL WORKFLOW: Submit edit for approval instead of direct UPDATE ──
+        $approval_data = [
+            'customer_code'      => $customer_code,
+            'customer_name'      => $customer_name,
+            'birth_place'        => $birth_place,
+            'id_number'          => $id_number,
+            'account_number'     => $account_number,
+            'occupation'         => $occupation,
+            'gender'             => $gender,
+            'date_of_birth'      => $date_of_birth,
+            'phone'              => $phone,
+            'father_name'        => $father_name,
+            'mother_name'        => $mother_name,
+            'spouse'             => $spouse,
+            'spouse_occupation'  => $spouse_occupation,
+            'spouse_phone'       => $spouse_phone,
+            'marriage_type'      => $marriage_type,
+            'address'            => $address,
+            'location'           => $location,
+            'project'            => $project,
+            'project_location'   => $project_location,
+            'caution_location'   => $caution_location,
+            'email'              => $email,
+            'organization'       => $organization,
+        ];
+
+        if (submitForApproval($conn, 'edit', 'customer', $customer_id, $approval_data, "Edit customer: $customer_name")) {
+            $success_message = "<div class='d-flex align-items-start gap-2'>
+                <i class='bi bi-hourglass-split text-warning fs-4'></i>
+                <div><strong>Edit Submitted for Approval!</strong><br>
+                Your changes to <strong>{$customer_name}</strong> are pending review by Director or MD.
+                </div></div>";
+        } else {
+            $error_message = "Could not submit for approval: " . $conn->error;
         }
     }
 }

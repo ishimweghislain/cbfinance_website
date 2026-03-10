@@ -40,21 +40,9 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Ensure session keys exist to prevent warnings
 if (!isset($_SESSION['user_id'])) {
-    $_SESSION['user_id'] = 1;
-}
-if (!isset($_SESSION['user_name'])) {
-    $_SESSION['user_name'] = 'Administrator';
-}
-if (!isset($_SESSION['username'])) {
-    $_SESSION['username'] = 'admin';
-}
-if (!isset($_SESSION['full_name'])) {
-    $_SESSION['full_name'] = 'Administrator';
-}
-if (!isset($_SESSION['email'])) {
-    $_SESSION['email'] = 'admin@example.com';
+    $_SESSION['user_id'] = 0;
 }
 if (!isset($_SESSION['role'])) {
-    $_SESSION['role'] = 'Administrator';
+    $_SESSION['role'] = 'Secretary'; 
 }
 ?>

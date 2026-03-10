@@ -15,10 +15,10 @@ if (!isset($_SESSION['user_id'])) {
 
 // Get user info from session
 $user_id = $_SESSION['user_id'];
-$username = $_SESSION['username'];
-$full_name = $_SESSION['full_name'];
-$email = $_SESSION['email'];
-$role = $_SESSION['role'];
+$username = $_SESSION['username'] ?? 'User';
+$full_name = $_SESSION['full_name'] ?? 'System User';
+$email = $_SESSION['email'] ?? 'user@cbfinance.rw';
+$role = $_SESSION['role'] ?? 'Secretary';
 
 
 $conn = getConnection();

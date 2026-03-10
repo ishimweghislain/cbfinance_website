@@ -1,41 +1,54 @@
 <?php
+session_start();
 require_once 'config/database.php';
+$conn = getConnection();
+
+$login_error = false;
 
 // Handle PHP side login to set session
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username']) && isset($_POST['password'])) {
-    $username = $_POST['username'];
+    $username = trim($_POST['username']);
     $password = $_POST['password'];
     
-    $VALID_CREDENTIALS = [
-        'admin'              => ['password' => 'newconfig@#2026', 'role' => 'Director'],
-        'admin@cbfinance.rw' => ['password' => 'newconfig@#2026', 'role' => 'Director'],
-        'director'           => ['password' => '123',             'role' => 'Director'],
-        'md'                 => ['password' => '123',             'role' => 'MD'],
-        'accountant'         => ['password' => '123',             'role' => 'Accountant'],
-        'secretary'          => ['password' => '123',             'role' => 'Secretary']
-    ];
-
-    if (isset($VALID_CREDENTIALS[$username]) && $VALID_CREDENTIALS[$username]['password'] === $password) {
-        $_SESSION['user_id'] = 1;
-        $_SESSION['username'] = $username;
-        $_SESSION['user_name'] = $VALID_CREDENTIALS[$username]['role']; // Using role as display name
-        $_SESSION['full_name'] = $VALID_CREDENTIALS[$username]['role'] . ' User'; // Default full name
-        $_SESSION['email'] = $username . '@cbfinance.rw'; // Default email
-        $_SESSION['role'] = $VALID_CREDENTIALS[$username]['role'];
-        $_SESSION['loggedIn'] = true;
+    // Check user in database
+    $stmt = $conn->prepare("SELECT user_id, username, password, role, full_name, email, is_active FROM users WHERE username = ? LIMIT 1");
+    if ($stmt) {
+        $stmt->bind_param("s", $username);
+        $stmt->execute();
+        $result = $stmt->get_result();
         
-        // Output for JS to catch and set localStorage (for backward compatibility with existing JS auth check)
-        echo "<script>
-            localStorage.setItem('authSession', JSON.stringify(" . json_encode([
-                'username' => $username,
-                'loggedIn' => true,
-                'timestamp' => time() * 1000,
-                'role' => $_SESSION['role']
-            ]) . "));
-            localStorage.setItem('authExpiry', 'session');
-            window.location.href = 'index.php';
-        </script>";
-        exit;
+        if ($result && $result->num_rows === 1) {
+            $user = $result->fetch_assoc();
+            
+            // Verify password and check if active
+            if ($user['is_active'] == 1 && password_verify($password, $user['password'])) {
+                $_SESSION['user_id'] = $user['user_id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['user_name'] = $user['full_name']; // Display name
+                $_SESSION['full_name'] = $user['full_name'];
+                $_SESSION['email'] = $user['email'];
+                $_SESSION['role'] = $user['role'];
+                $_SESSION['loggedIn'] = true;
+                
+                // Output for JS to catch and set localStorage (for backward compatibility)
+                echo "<script>
+                    localStorage.setItem('authSession', JSON.stringify(" . json_encode([
+                        'username' => $user['username'],
+                        'loggedIn' => true,
+                        'timestamp' => time() * 1000,
+                        'role' => $user['role']
+                    ]) . "));
+                    localStorage.setItem('authExpiry', 'session');
+                    window.location.href = 'index.php';
+                </script>";
+                exit;
+            } else {
+                $login_error = true;
+            }
+        } else {
+            $login_error = true;
+        }
+        $stmt->close();
     } else {
         $login_error = true;
     }

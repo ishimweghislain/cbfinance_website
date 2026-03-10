@@ -3,3 +3,4 @@ deployment:
   tasks:
     - export DEPLOYPATH=/home/cbfinance/public_html
     - /bin/cp -R * $DEPLOYPATH
+

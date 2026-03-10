@@ -4,14 +4,8 @@ $_SERVER['SERVER_NAME'] = 'localhost';
 require_once 'config/database.php';
 $conn = getConnection();
 
-echo "--- USERS TABLE ---\n";
-$res = $conn->query("DESC users");
+echo "--- LOAN_INSTALMENTS TABLE ---\n";
+$res = $conn->query("DESC loan_instalments");
 while($row = $res->fetch_assoc()) {
-    print_r($row);
-}
-
-echo "\n--- TABLES ---\n";
-$res = $conn->query("SHOW TABLES");
-while($row = $res->fetch_row()) {
-    echo $row[0] . "\n";
+    echo $row['Field'] . " - " . $row['Type'] . "\n";
 }

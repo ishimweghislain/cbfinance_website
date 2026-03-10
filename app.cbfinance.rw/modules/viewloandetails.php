@@ -33,7 +33,7 @@ if (!$check_customer_table || $check_customer_table->num_rows === 0) {
 }
 
 $check_instalments_table = $conn->query("SHOW TABLES LIKE 'loan_instalments'");
-$check_payments_table    = $conn->query("SHOW TABLES LIKE 'payments'");
+$check_payments_table    = $conn->query("SHOW TABLES LIKE 'loan_payments'");
 $check_accounting_table  = $conn->query("SHOW TABLES LIKE 'accounting_entries'");
 
 // ── Dynamic customer columns ─────────────────────────────────────────────────
@@ -81,8 +81,8 @@ $instalments = array();
 if ($check_instalments_table && $check_instalments_table->num_rows > 0) {
     $s = $conn->prepare(
         "SELECT instalment_id, loan_id, instalment_number, due_date,
-                principal_amount, interest_amount, fees_amount, total_amount,
-                amount_paid, balance_due, payment_status, paid_date,
+                principal_amount, interest_amount, management_fee as fees_amount, total_payment as total_amount,
+                paid_amount as amount_paid, balance_remaining as balance_due, status as payment_status, payment_date as paid_date,
                 days_overdue, created_at, updated_at
          FROM loan_instalments WHERE loan_id = ? ORDER BY instalment_number ASC"
     );
@@ -114,9 +114,9 @@ $payments = array();
 if ($check_payments_table && $check_payments_table->num_rows > 0) {
     $s = $conn->prepare(
         "SELECT payment_id, loan_id, payment_amount, payment_date,
-                payment_method, reference_number, received_by,
-                payment_status, created_at
-         FROM payments WHERE loan_id = ? ORDER BY payment_date ASC"
+                payment_method, reference_number,
+                created_at
+         FROM loan_payments WHERE loan_id = ? ORDER BY payment_date ASC"
     );
     if ($s) {
         $s->bind_param("i", $loan_id);
@@ -228,8 +228,8 @@ if ($customer_id > 0 && !empty($current_disb_date)) {
         if ($check_instalments_table && $check_instalments_table->num_rows > 0) {
             $s = $conn->prepare(
                 "SELECT instalment_number, due_date, principal_amount, interest_amount,
-                        fees_amount, total_amount, amount_paid, balance_due,
-                        payment_status, paid_date, days_overdue
+                        management_fee as fees_amount, total_payment as total_amount, paid_amount as amount_paid, 
+                        balance_remaining as balance_due, status as payment_status, payment_date as paid_date, days_overdue
                  FROM loan_instalments WHERE loan_id = ? ORDER BY instalment_number ASC"
             );
             if ($s) {

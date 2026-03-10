@@ -58,6 +58,7 @@ if (isset($_POST['update_status']) && isset($_POST['loan_id']) && isset($_POST['
 }
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/approval_helper.php';
 $conn = getConnection();
 
 // Initialize messages
@@ -70,70 +71,39 @@ if (isset($_POST['delete_loan_id']) && !empty($_POST['delete_loan_id'])) {
     
     if ($delete_id > 0) {
         try {
-            $get_loan_sql = "SELECT loan_number FROM loan_portfolio WHERE loan_id = ?";
+            // Get loan number and customer info for the approval request
+            $get_loan_sql = "SELECT lp.loan_number, lp.customer_id, c.customer_name 
+                             FROM loan_portfolio lp
+                             LEFT JOIN customers c ON lp.customer_id = c.customer_id
+                             WHERE lp.loan_id = ?";
             $get_loan_stmt = $conn->prepare($get_loan_sql);
             if ($get_loan_stmt) {
                 $get_loan_stmt->bind_param("i", $delete_id);
                 $get_loan_stmt->execute();
-                $get_loan_stmt->bind_result($loan_number);
+                $get_loan_stmt->bind_result($loan_number, $customer_id, $customer_name);
                 $get_loan_stmt->fetch();
                 $get_loan_stmt->close();
             }
-            
-            $conn->begin_transaction();
-            
-            $get_instalment_ids_sql = "SELECT instalment_id FROM loan_instalments WHERE loan_id = ?";
-            $get_instalment_ids_stmt = $conn->prepare($get_instalment_ids_sql);
-            $instalment_ids = [];
-            
-            if ($get_instalment_ids_stmt) {
-                $get_instalment_ids_stmt->bind_param("i", $delete_id);
-                $get_instalment_ids_stmt->execute();
-                $result = $get_instalment_ids_stmt->get_result();
-                while ($row = $result->fetch_assoc()) {
-                    $instalment_ids[] = $row['instalment_id'];
-                }
-                $get_instalment_ids_stmt->close();
-            }
-            
-            if (!empty($instalment_ids)) {
-                $instalment_ids_str = implode(',', $instalment_ids);
-                $delete_payments_sql = "DELETE FROM loan_payments WHERE loan_instalment_id IN ({$instalment_ids_str})";
-                $conn->query($delete_payments_sql);
-            }
-            
-            $delete_instalments_sql = "DELETE FROM loan_instalments WHERE loan_id = ?";
-            $delete_instalments_stmt = $conn->prepare($delete_instalments_sql);
-            if ($delete_instalments_stmt) {
-                $delete_instalments_stmt->bind_param("i", $delete_id);
-                $delete_instalments_stmt->execute();
-                $delete_instalments_stmt->close();
-            }
-            
-            $delete_sql = "DELETE FROM loan_portfolio WHERE loan_id = ?";
-            $delete_stmt = $conn->prepare($delete_sql);
-            
-            if ($delete_stmt) {
-                $delete_stmt->bind_param("i", $delete_id);
-                if ($delete_stmt->execute()) {
-                    if ($delete_stmt->affected_rows > 0) {
-                        $conn->commit();
-                        $success_message = "✓ Loan #{$loan_number} deleted successfully!";
-                        echo "<script>setTimeout(function() { window.location.href = '?page=loans'; }, 1500);</script>";
-                    } else {
-                        $conn->rollback();
-                        $error_message = "Loan not found or already deleted.";
-                    }
+
+            if (!empty($loan_number)) {
+                $approval_data = [
+                    'loan_id' => $delete_id,
+                    'loan_number' => $loan_number,
+                    'customer_id' => $customer_id,
+                    'customer_name' => $customer_name,
+                    'action_note' => 'Permanent deletion of loan and all related instalments/payments'
+                ];
+
+                if (submitForApproval($conn, 'delete', 'loan', $delete_id, $approval_data, "Delete loan #$loan_number ($customer_name)")) {
+                    $success_message = "⏳ Deletion request for loan <strong>#$loan_number</strong> submitted for approval by Director or MD.";
                 } else {
-                    $conn->rollback();
-                    $error_message = "Failed to delete loan: " . $delete_stmt->error;
+                    $error_message = "Could not submit loan deletion for approval: " . $conn->error;
                 }
-                $delete_stmt->close();
+            } else {
+                $error_message = "Loan not found.";
             }
-            
         } catch (Exception $e) {
-            $conn->rollback();
-            $error_message = "Error deleting loan: " . $e->getMessage();
+            $error_message = "Error submitting loan deletion: " . $e->getMessage();
         }
     }
 }

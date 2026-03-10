@@ -8,6 +8,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/approval_helper.php';
 $conn = getConnection();
 
 if (!$conn) {
@@ -362,124 +363,52 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 $loan_status = $loan['loan_status'];
                                 $created_by = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : 1;
                                 
-                                // Start transaction
-                                mysqli_begin_transaction($conn);
-                                
-                                try {
-                                    // Update loan portfolio
-                                    $sql = "UPDATE loan_portfolio SET
-                                        customer_id = " . intval($customer_id) . ",
-                                        loan_number = '" . mysqli_real_escape_string($conn, $loan_number) . "',
-                                        loan_amount = " . floatval($loan_amount) . ",
-                                        management_fee_rate = " . floatval($management_fee_rate) . ",
-                                        management_fee_amount = " . floatval($management_fee) . ",
-                                        total_disbursed = " . floatval($total_disbursed) . ",
-                                        interest_rate = " . floatval($interest_rate) . ",
-                                        number_of_instalments = " . intval($number_of_instalments) . ",
-                                        disbursement_date = '" . mysqli_real_escape_string($conn, $disbursement_date) . "',
-                                        maturity_date = '" . mysqli_real_escape_string($conn, $maturity_date) . "',
-                                        total_interest = " . floatval($total_interest) . ",
-                                        total_management_fees = " . floatval($total_management_fees) . ",
-                                        total_payment = " . floatval($total_payment) . ",
-                                        monthly_payment = " . floatval($monthly_payment) . ",
-                                        principal_outstanding = " . floatval($principal_outstanding) . ",
-                                        interest_outstanding = " . floatval($interest_outstanding) . ",
-                                        total_outstanding = " . floatval($total_outstanding) . ",
-                                        cash_amount = " . floatval($cash_amount) . ",
-                                        bank_amount = " . floatval($bank_amount) . ",
-                                        collateral_type = '" . mysqli_real_escape_string($conn, $collateral_type) . "',
-                                        collateral_description = '" . mysqli_real_escape_string($conn, $collateral_description) . "',
-                                        collateral_value = " . floatval($collateral_value) . ",
-                                        collateral_net_value = " . floatval($collateral_net_value) . ",
-                                        provisional_rate = 1.0,
-                                        general_provision = " . floatval($general_provision) . ",
-                                        net_book_value = " . floatval($net_book_value) . ",
-                                        accrued_days = " . intval($accrued_days) . ",
-                                        loan_status = '" . mysqli_real_escape_string($conn, $loan_status) . "',
-                                        updated_at = NOW()
-                                    WHERE loan_id = " . intval($loan_id);
-                                    
-                                    error_log("UPDATE SQL: " . $sql);
-                                    
-                                    // Execute the UPDATE query
-                                    if (!mysqli_query($conn, $sql)) {
-                                        throw new Exception("Failed to update loan: " . mysqli_error($conn));
-                                    }
-                                    
-                                    // Update customer balances if customer changed or amount changed
-                                    if ($old_customer_id != $customer_id) {
-                                        // Remove from old customer
-                                        $update_old_sql = "UPDATE customers SET 
-                                                          current_balance = current_balance - " . floatval($old_loan_amount) . ",
-                                                          total_loans = total_loans - " . floatval($old_loan_amount) . ",
-                                                          updated_at = NOW()
-                                                          WHERE customer_id = " . intval($old_customer_id);
-                                        
-                                        if (!mysqli_query($conn, $update_old_sql)) {
-                                            throw new Exception("Failed to update old customer balance: " . mysqli_error($conn));
-                                        }
-                                        
-                                        // Add to new customer
-                                        $update_new_sql = "UPDATE customers SET 
-                                                          current_balance = current_balance + " . floatval($loan_amount) . ",
-                                                          total_loans = total_loans + " . floatval($loan_amount) . ",
-                                                          updated_at = NOW()
-                                                          WHERE customer_id = " . intval($customer_id);
-                                        
-                                        if (!mysqli_query($conn, $update_new_sql)) {
-                                            throw new Exception("Failed to update new customer balance: " . mysqli_error($conn));
-                                        }
-                                    } else {
-                                        // Same customer, adjust balance difference
-                                        $balance_diff = $loan_amount - $old_loan_amount;
-                                        if ($balance_diff != 0) {
-                                            $update_sql = "UPDATE customers SET 
-                                                          current_balance = current_balance + " . floatval($balance_diff) . ",
-                                                          total_loans = total_loans + " . floatval($balance_diff) . ",
-                                                          updated_at = NOW()
-                                                          WHERE customer_id = " . intval($customer_id);
-                                            
-                                            if (!mysqli_query($conn, $update_sql)) {
-                                                throw new Exception("Failed to update customer balance: " . mysqli_error($conn));
-                                            }
-                                        }
-                                    }
-                                    
-                                    // Delete and recreate installment schedule if key parameters changed
-                                    if ($loan['total_disbursed'] != $total_disbursed || 
-                                        $loan['number_of_instalments'] != $number_of_instalments ||
-                                        $loan['disbursement_date'] != $disbursement_date ||
-                                        $loan['interest_rate'] != $interest_rate ||
-                                        $loan['management_fee_rate'] != $management_fee_rate) {
-                                        
-                                        // Delete existing instalments
-                                        $delete_instalments = "DELETE FROM loan_instalments WHERE loan_id = " . intval($loan_id);
-                                        if (!mysqli_query($conn, $delete_instalments)) {
-                                            throw new Exception("Failed to delete instalments: " . mysqli_error($conn));
-                                        }
-                                        
-                                        // Create new installment schedule
-                                        createInstallmentSchedule($conn, $loan_id, $loan_number, $disbursement_date, 
-                                                                 $number_of_instalments, $created_by, 
-                                                                 $total_disbursed, $interest_rate, $management_fee_rate);
-                                    }
-                                    
-                                    // Create transaction record for update
-                                    createTransactionRecord($conn, $loan_id, $loan_number, 'Update', 
-                                                          date('Y-m-d'), $total_disbursed, 
-                                                          "Loan updated", $created_by);
-                                    
-                                    // Commit transaction
-                                    mysqli_commit($conn);
-                                    
-                                    $_SESSION['success_message'] = "Loan updated successfully! Loan Number: " . htmlspecialchars($loan_number);
+                                // ── APPROVAL WORKFLOW ──
+                                // Collect all loan data into an array and submit for approval
+                                $approval_data = [
+                                    'loan_id'                => $loan_id,
+                                    'customer_id'            => $customer_id,
+                                    'loan_number'            => $loan_number,
+                                    'loan_amount'            => $loan_amount,
+                                    'management_fee_rate'    => $management_fee_rate,
+                                    'management_fee_amount'  => $management_fee,
+                                    'total_disbursed'        => $total_disbursed,
+                                    'interest_rate'          => $interest_rate,
+                                    'number_of_instalments'  => $number_of_instalments,
+                                    'disbursement_date'      => $disbursement_date,
+                                    'maturity_date'          => $maturity_date,
+                                    'total_interest'         => $total_interest,
+                                    'total_management_fees'  => $total_management_fees,
+                                    'total_payment'          => $total_payment,
+                                    'monthly_payment'        => $monthly_payment,
+                                    'principal_outstanding'  => $principal_outstanding,
+                                    'interest_outstanding'   => $interest_outstanding,
+                                    'total_outstanding'      => $total_outstanding,
+                                    'cash_amount'            => $cash_amount,
+                                    'bank_amount'            => $bank_amount,
+                                    'collateral_type'        => $collateral_type,
+                                    'collateral_description' => $collateral_description,
+                                    'collateral_value'       => $collateral_value,
+                                    'collateral_net_value'   => $collateral_net_value,
+                                    'provisional_rate'       => 1.0,
+                                    'general_provision'      => $general_provision,
+                                    'net_book_value'         => $net_book_value,
+                                    'accrued_days'           => $accrued_days,
+                                    'loan_status'            => $loan_status,
+                                    'old_loan_amount'        => $old_loan_amount,
+                                    'old_customer_id'        => $old_customer_id
+                                ];
+
+                                // Get customer name for description
+                                $cname_res = $conn->query("SELECT customer_name FROM customers WHERE customer_id = " . intval($customer_id));
+                                $cname = $cname_res ? $cname_res->fetch_assoc()['customer_name'] : 'Customer #' . $customer_id;
+
+                                if (submitForApproval($conn, 'edit', 'loan', $loan_id, $approval_data, "Update loan $loan_number for $cname")) {
+                                    $_SESSION['success_message'] = "⏳ Loan update for <strong>$loan_number</strong> submitted for approval by Director or MD.";
                                     echo "<script>window.location.href='?page=loans'</script>";
                                     exit();
-                                    
-                                } catch (Exception $e) {
-                                    mysqli_rollback($conn);
-                                    $error_message = $e->getMessage();
-                                    error_log("Loan update error: " . $e->getMessage());
+                                } else {
+                                    $error_message = "Could not submit loan update for approval: " . $conn->error;
                                 }
                             }
                         }

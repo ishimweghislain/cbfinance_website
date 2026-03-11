@@ -123,6 +123,18 @@ function recalculateRemainingSchedule($conn, $loan_id, $current_instalment_numbe
             break;
         }
     }
+
+    // 3. FINAL SYNC: Update loan_portfolio summary outstandings based on new schedule
+    $sync_q = "UPDATE loan_portfolio lp SET 
+               lp.principal_outstanding = (SELECT IFNULL(SUM(principal_amount - principal_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id),
+               lp.interest_outstanding  = (SELECT IFNULL(SUM(interest_amount - interest_paid), 0)   FROM loan_instalments WHERE loan_id = lp.loan_id),
+               lp.total_outstanding     = lp.principal_outstanding + lp.interest_outstanding,
+               lp.updated_at            = NOW()
+               WHERE lp.loan_id = ?";
+    $sync_st = $conn->prepare($sync_q);
+    $sync_st->bind_param("i", $loan_id);
+    $sync_st->execute();
+    $sync_st->close();
 }
 
 function PMT($rate, $nper, $pv) {
@@ -1369,7 +1381,7 @@ $mgmt_fee_rate_label = formatRateLabel($mgmt_fee_rate_pct);
                             <tfoot class="table-light">
                                 <tr>
                                     <th colspan="2" class="text-end">TOTALS:</th>
-                                    <th class="text-end"><?php echo number_format($loan_info['total_disbursed_amount'] ?? 0, 0); ?></th>
+                                    <th class="text-end"><?php echo number_format($loan_info['total_disbursed'] ?? $loan_info['loan_amount'] ?? 0, 0); ?></th>
                                     <th class="text-end"><?php echo number_format(array_sum(array_column($existing_instalments, 'principal_amount')), 0); ?></th>
                                     <th class="text-end"><?php echo number_format(array_sum(array_column($existing_instalments, 'interest_amount')), 0); ?></th>
                                     <th class="text-end"><?php echo number_format(array_sum(array_column($existing_instalments, 'management_fee')), 0); ?></th>

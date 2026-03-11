@@ -15,31 +15,24 @@ try {
     $loan = $res->fetch_assoc();
     if (!$loan) die("Loan ID $loan_id not found.");
 
-    // ── Use correct columns based on DB schema ───────────────────────────────
-    // Based on loan_portfolio table structure:
-    // loan_amount = Principal given
-    // total_disbursed = loan_amount + mgmt_fee (This is the principal to be repaid)
-    // total_interest = Total expected interest
-    
-    $amount = floatval($loan['total_disbursed'] ?? $loan['loan_amount']);
-    $expected_interest = floatval($loan['total_interest']);
-    $int_rate = floatval($loan['interest_rate']) / 100;
+    $amount = floatval($loan['total_disbursed'] ?? $loan['loan_amount'] ?? 0);
+    if ($amount <= 0) {
+        die("Error: Loan amount is 0. Reset aborted to prevent schedule corruption.");
+    }
+    $expected_interest = floatval($loan['total_interest'] ?? 0);
+    $int_rate = floatval($loan['interest_rate'] ?? 0) / 100;
     
     // 2. Delete ALL payments and ledgers tied to this loan
     // Delete ledger entries related to loan payments for this loan
     $conn->query("DELETE FROM ledger WHERE reference_type = 'loan_payment' AND reference_id IN (SELECT instalment_id FROM loan_instalments WHERE loan_id = $loan_id)");
     $conn->query("DELETE FROM loan_payments WHERE loan_id = $loan_id");
 
-    // 3. Reset Loan Portfolio Summary
-    // We reset outstandings to their initial values
+    // 3. Reset Loan Portfolio Summary (Initial pass)
     $conn->query("UPDATE loan_portfolio SET 
         total_paid = 0,
         total_principal_paid = 0,
         total_interest_paid = 0,
         total_management_fees_paid = 0,
-        principal_outstanding = $amount,
-        interest_outstanding = $expected_interest,
-        total_outstanding = $amount + $expected_interest,
         loan_status = 'Active'
         WHERE loan_id = $loan_id");
 
@@ -53,6 +46,9 @@ try {
     $inst_res = $conn->query("SELECT * FROM loan_instalments WHERE loan_id = $loan_id ORDER BY instalment_number ASC");
     $instalments = $inst_res->fetch_all(MYSQLI_ASSOC);
     $nper = count($instalments);
+    
+    $total_interest_calc = 0;
+    $total_fees_calc = 0;
     
     if ($nper > 0) {
         $pv = $amount;
@@ -82,6 +78,10 @@ try {
             $total = round($princ + $int + $fee, 2);
             $cb = max(0, round($balance - $princ, 2));
             
+            // Accrue totals for portfolio sync
+            $total_interest_calc += $int;
+            $total_fees_calc     += $fee;
+
             $conn->query("UPDATE loan_instalments SET
                 opening_balance = $balance,
                 principal_amount = $princ,
@@ -102,6 +102,18 @@ try {
                 
             $balance = $cb;
         }
+
+        // Now Update Loan Portfolio with REAL totals from the schedule we just built
+        $conn->query("UPDATE loan_portfolio SET 
+            total_interest = $total_interest_calc,
+            total_management_fees = $total_fees_calc,
+            total_payment = " . ($amount + $total_interest_calc + $total_fees_calc) . ",
+            principal_outstanding = $amount,
+            interest_outstanding = $total_interest_calc,
+            total_outstanding = " . ($amount + $total_interest_calc) . ",
+            total_paid = 0,
+            loan_status = 'Active'
+            WHERE loan_id = $loan_id");
     }
 
     $conn->commit();

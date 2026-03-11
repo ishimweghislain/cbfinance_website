@@ -104,13 +104,14 @@ try {
             total_management_fees_paid  = GREATEST(0, total_management_fees_paid - ?),
             principal_outstanding       = principal_outstanding + ?,
             interest_outstanding        = interest_outstanding + ?,
+            total_outstanding           = (principal_outstanding + ?) + (interest_outstanding + ?),
             loan_status                 = 'Active',
             updated_at                  = NOW()
          WHERE loan_id = ?"
     );
-    $port_stmt->bind_param("ddddddi",
+    $port_stmt->bind_param("ddddddddi",
         $amount, $principal_paid, $interest_paid, $mgmt_fee_paid,
-        $principal_paid, $interest_paid, $loan_id
+        $principal_paid, $interest_paid, $principal_paid, $interest_paid, $loan_id
     );
     $port_stmt->execute();
     $port_stmt->close();

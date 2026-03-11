@@ -11,6 +11,7 @@ $conn = getConnection();
 // Safely include logger if it exists
 $logger_path = __DIR__ . '/../includes/activity_logger.php';
 if (file_exists($logger_path)) require_once $logger_path;
+require_once __DIR__ . '/../includes/accounting_functions.php';
 
 // ─── Start Transaction ────────────────────────────────────────────────────────
 $conn->begin_transaction();
@@ -25,6 +26,12 @@ try {
     $pmt_stmt->close();
 
     if (!$pmt) throw new Exception("Payment record not found (ID: $payment_id).");
+
+    // Fetch loan rates for recalculation
+    $rate_res = $conn->query("SELECT interest_rate, management_fee_rate FROM loan_portfolio WHERE loan_id = $loan_id");
+    $rates = $rate_res->fetch_assoc();
+    $interest_rate = floatval($rates['interest_rate'] ?? 5.0) / 100;
+    $mgmt_fee_rate = floatval($rates['management_fee_rate'] ?? 5.5) / 100;
 
     // Read amounts — handle both possible column naming conventions gracefully
     $amount         = floatval($pmt['payment_amount'] ?? 0);
@@ -59,10 +66,11 @@ try {
         $new_pen       = max(0, floatval($inst_check['penalty_paid'])         - $penalty_paid);
         $total_due     = floatval($inst_check['total_payment']);
 
-        // Restore balance_remaining
-        $new_bal_rem   = max(0, floatval($inst_check['balance_remaining']) + $total_loan_part + $penalty_paid);
-        // Restore closing_balance (back toward opening_balance)
-        $new_closing   = floatval($inst_check['opening_balance']) - $new_princ;
+        // Restore balance_remaining by taking total scheduled payment minus what is now left as paid
+        $new_bal_rem   = max(0, $total_due - $new_paid);
+        
+        // Restore closing_balance to what it SHOULD be based on opening balance and scheduled principal
+        $new_closing   = floatval($inst_check['opening_balance']) - floatval($inst_check['principal_amount']);
 
         // Re-determine status
         if ($new_paid <= 0.01) {
@@ -93,6 +101,10 @@ try {
         );
         $rev_stmt->execute();
         $rev_stmt->close();
+
+        // ── 3b. Trigger schedule recalculation for future instalments ───────
+        $current_inst_num = intval($inst_check['instalment_number']);
+        recalculateRemainingSchedule($conn, $loan_id, $current_inst_num, $new_closing, $interest_rate, $mgmt_fee_rate);
     }
 
     // ── 4. Reverse loan portfolio totals ─────────────────────────────────────

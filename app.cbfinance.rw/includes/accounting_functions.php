@@ -245,4 +245,132 @@ function createJournalEntry($conn, $entry_data) {
     
     return $journal_id;
 }
+
+/**
+ * Financial Calculation Functions (PMT / PPMT / IPMT)
+ */
+function PMT($rate, $nper, $pv) {
+    if ($rate == 0) return -$pv / $nper;
+    return -$pv * ($rate * pow(1 + $rate, $nper)) / (pow(1 + $rate, $nper) - 1);
+}
+
+function IPMT($rate, $period, $nper, $pv) {
+    if ($period == 1) return -$pv * $rate;
+    $pmt = PMT($rate, $nper, $pv);
+    $remaining_balance = $pv;
+    for ($i = 1; $i < $period; $i++) {
+        $interest = -$remaining_balance * $rate;
+        $principal = $pmt - $interest;
+        $remaining_balance += $principal;
+    }
+    return -$remaining_balance * $rate;
+}
+
+function PPMT($rate, $period, $nper, $pv) {
+    return PMT($rate, $nper, $pv) - IPMT($rate, $period, $nper, $pv);
+}
+
+/**
+ * Re-amortizes the remaining loan schedule based on a new principal balance.
+ * Typically used after an early repayment or a payment deletion.
+ */
+function recalculateRemainingSchedule($conn, $loan_id, $current_instalment_number, $new_closing_balance, $interest_rate, $mgmt_fee_rate) {
+    if ($new_closing_balance < 0.01) {
+        $new_closing_balance = 0;
+    }
+
+    // 1. Fetch all future instalments
+    $query = "SELECT * FROM loan_instalments WHERE loan_id = ? AND instalment_number > ? ORDER BY instalment_number ASC";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("ii", $loan_id, $current_instalment_number);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $future_instalments = $result->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    if (empty($future_instalments)) {
+         // Even if no future installments, sync portfolio
+         syncLoanPortfolio($conn, $loan_id);
+         return;
+    }
+
+    // If balance reached zero, mark all future as fully paid and zero them out
+    if ($new_closing_balance <= 0) {
+        foreach ($future_instalments as $inst) {
+            $upd = $conn->prepare("UPDATE loan_instalments SET opening_balance=0, principal_amount=0, interest_amount=0, total_payment=0, closing_balance=0, balance_remaining=0, status='Fully Paid', updated_at=NOW() WHERE instalment_id=?");
+            $upd->bind_param("i", $inst['instalment_id']);
+            $upd->execute();
+            $upd->close();
+        }
+        syncLoanPortfolio($conn, $loan_id);
+        return;
+    }
+
+    $num_remaining = count($future_instalments);
+    $opening_balance = $new_closing_balance;
+
+    for ($i = 0; $i < $num_remaining; $i++) {
+        $inst = $future_instalments[$i];
+        $inst_id = $inst['instalment_id'];
+        $inst_num = $i + 1; 
+        
+        // Recalculate principal to amortize the rest over remaining periods
+        $principal = round(-PPMT($interest_rate, $inst_num, $num_remaining, $new_closing_balance), 2);
+        
+        if ($i == $num_remaining - 1 || ($opening_balance - $principal) < 1) {
+            $principal = $opening_balance;
+        }
+
+        $interest = round($opening_balance * $interest_rate, 2);
+        $mgmt_fee = floatval($inst['management_fee']);
+        
+        $total_payment = round($principal + $interest + $mgmt_fee, 2);
+        $closing_balance = max(0, round($opening_balance - $principal, 2));
+        
+        // If it was already fully paid, keep it paid? 
+        // No, if we are recalculating due to deletion, it might become pending again.
+        // But if it was partially paid, we should preserve the paid amount.
+        $paid_amt = floatval($inst['paid_amount']);
+        $new_bal_rem = max(0, $total_payment - $paid_amt);
+        $new_status = ($new_bal_rem <= 0.01) ? 'Fully Paid' : (($paid_amt > 0) ? 'Partially Paid' : 'Pending');
+
+        $update_query = "UPDATE loan_instalments SET 
+            opening_balance = ?, principal_amount = ?, interest_amount = ?, management_fee = ?, 
+            total_payment = ?, closing_balance = ?, balance_remaining = ?, status = ?, updated_at = NOW()
+            WHERE instalment_id = ?";
+        $upd_stmt = $conn->prepare($update_query);
+        $upd_stmt->bind_param("dddddddsi", 
+            $opening_balance, $principal, $interest, $mgmt_fee, $total_payment, $closing_balance, $new_bal_rem, $new_status, $inst_id
+        );
+        $upd_stmt->execute();
+        $upd_stmt->close();
+
+        $opening_balance = $closing_balance;
+        if ($opening_balance <= 0) {
+            for ($j = $i + 1; $j < $num_remaining; $j++) {
+                $future_id = $future_instalments[$j]['instalment_id'];
+                $conn->query("UPDATE loan_instalments SET opening_balance=0, principal_amount=0, interest_amount=0, total_payment=0, closing_balance=0, balance_remaining=0, status='Fully Paid' WHERE instalment_id=$future_id");
+            }
+            break;
+        }
+    }
+
+    syncLoanPortfolio($conn, $loan_id);
+}
+
+/**
+ * Synchronizes the loan_portfolio summary columns with the latest installment schedule data.
+ */
+function syncLoanPortfolio($conn, $loan_id) {
+    $sync_q = "UPDATE loan_portfolio lp SET 
+               lp.principal_outstanding = (SELECT IFNULL(SUM(principal_amount - principal_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id),
+               lp.interest_outstanding  = (SELECT IFNULL(SUM(interest_amount - interest_paid), 0)   FROM loan_instalments WHERE loan_id = lp.loan_id),
+               lp.total_outstanding     = lp.principal_outstanding + lp.interest_outstanding,
+               lp.updated_at            = NOW()
+               WHERE lp.loan_id = ?";
+    $sync_st = $conn->prepare($sync_q);
+    $sync_st->bind_param("i", $loan_id);
+    $sync_st->execute();
+    $sync_st->close();
+}
 ?>

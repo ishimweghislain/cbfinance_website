@@ -32,7 +32,12 @@ try {
     // Get dashboard statistics
     
     // 1. Total Active Loans
-    $result = $conn->query("SELECT COUNT(*) as total_loans, COALESCE(SUM(total_outstanding), 0) as total_outstanding FROM loan_portfolio WHERE loan_status IN ('Active', 'Performing')");
+    $result = $conn->query("SELECT 
+        COUNT(*) as total_loans, 
+        COALESCE(SUM(principal_outstanding), 0) as principal_outstanding,
+        COALESCE(SUM(interest_outstanding), 0) as interest_outstanding,
+        COALESCE(SUM(total_outstanding), 0) as total_outstanding 
+        FROM loan_portfolio WHERE loan_status IN ('Active', 'Performing')");
     if ($result) {
         $stats['loans'] = $result->fetch_assoc();
     }
@@ -263,7 +268,11 @@ try {
                             </div>
                             <div class="text-xs text-muted mt-1">
                                 <i class="fas fa-money-bill-wave fa-fw me-1"></i>
-                                <?php echo number_format($stats['loans']['total_outstanding'] ?? 0, 2); ?> Outstanding
+                                Principal: <strong><?php echo number_format($stats['loans']['principal_outstanding'] ?? 0, 2); ?></strong>
+                            </div>
+                            <div class="text-xs text-muted mt-1">
+                                <i class="fas fa-plus-circle fa-fw me-1"></i>
+                                Total (P+I): <strong><?php echo number_format($stats['loans']['total_outstanding'] ?? 0, 2); ?></strong>
                             </div>
                             <?php if(isset($stats['overdue']) && $stats['overdue']['overdue_loans'] > 0): ?>
                             <div class="small-stat text-danger mt-1">

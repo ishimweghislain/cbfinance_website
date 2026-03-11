@@ -362,9 +362,21 @@ function recalculateRemainingSchedule($conn, $loan_id, $current_instalment_numbe
  * Synchronizes the loan_portfolio summary columns with the latest installment schedule data.
  */
 function syncLoanPortfolio($conn, $loan_id) {
+    // 1. First, recalibrate the total_principal_paid and total_interest_paid based on instalments
+    $conn->query("UPDATE loan_portfolio lp SET 
+        lp.total_principal_paid = (SELECT IFNULL(SUM(principal_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id),
+        lp.total_interest_paid  = (SELECT IFNULL(SUM(interest_paid), 0)  FROM loan_instalments WHERE loan_id = lp.loan_id),
+        lp.total_management_fees_paid = (SELECT IFNULL(SUM(management_fee_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id),
+        lp.total_paid = (SELECT IFNULL(SUM(paid_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)
+        WHERE lp.loan_id = $loan_id");
+
+    // 2. Now update outstanding balances: 
+    // Principal Outstanding = Total Disbursed - Total Principal Paid
+    // Interest Outstanding = Total Scheduled Interest - Total Interest Paid
+    // Total Outstanding = P + I
     $sync_q = "UPDATE loan_portfolio lp SET 
-               lp.principal_outstanding = (SELECT IFNULL(SUM(principal_amount - principal_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id),
-               lp.interest_outstanding  = (SELECT IFNULL(SUM(interest_amount - interest_paid), 0)   FROM loan_instalments WHERE loan_id = lp.loan_id),
+               lp.principal_outstanding = GREATEST(0, lp.total_disbursed - lp.total_principal_paid),
+               lp.interest_outstanding  = GREATEST(0, (SELECT IFNULL(SUM(interest_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) - lp.total_interest_paid),
                lp.total_outstanding     = lp.principal_outstanding + lp.interest_outstanding,
                lp.updated_at            = NOW()
                WHERE lp.loan_id = ?";

@@ -65,7 +65,7 @@ if ($action) {
                 $error = "Error: " . $stmt->error;
             }
         } else {
-            $error = "Cannot delete other developer accounts for system safety.";
+            $error = "For system safety, Developer accounts cannot be deleted here.";
         }
     }
 }

@@ -25,6 +25,127 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+/**
+ * Recalculates the remaining loan schedule after an extra principal payment (Early Repayment).
+ */
+function recalculateRemainingSchedule($conn, $loan_id, $current_instalment_number, $new_closing_balance, $interest_rate, $mgmt_fee_rate) {
+    if ($new_closing_balance < 0.01) {
+        $new_closing_balance = 0;
+    }
+
+    // 1. Fetch all pending future instalments
+    $query = "SELECT * FROM loan_instalments WHERE loan_id = ? AND instalment_number > ? ORDER BY instalment_number ASC";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("ii", $loan_id, $current_instalment_number);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $future_instalments = $result->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    if (empty($future_instalments)) return;
+
+    // If balanced reached zero, mark all future as fully paid and zero them out
+    if ($new_closing_balance <= 0) {
+        foreach ($future_instalments as $inst) {
+            $upd = $conn->prepare("UPDATE loan_instalments SET opening_balance=0, principal_amount=0, interest_amount=0, total_payment=0, closing_balance=0, balance_remaining=0, status='Fully Paid', updated_at=NOW() WHERE instalment_id=?");
+            $upd->bind_param("i", $inst['instalment_id']);
+            $upd->execute();
+            $upd->close();
+        }
+        return;
+    }
+
+    $num_remaining = count($future_instalments);
+    $opening_balance = $new_closing_balance;
+
+    for ($i = 0; $i < $num_remaining; $i++) {
+        $inst = $future_instalments[$i];
+        $inst_id = $inst['instalment_id'];
+        $inst_num = $i + 1; 
+        
+        $interest = round($opening_balance * $interest_rate, 2);
+        $mgmt_fee = floatval($inst['management_fee']); // Usually fixed, but can be recalculated if % of OB
+        
+        // Recalculate principal to amortize the rest over remaining periods
+        if ($num_remaining > 0) {
+            $principal = round(-PPMT($interest_rate, $inst_num, $num_remaining, $new_closing_balance), 2);
+        } else {
+            $principal = $opening_balance;
+        }
+        
+        if ($i == $num_remaining - 1 || ($opening_balance - $principal) < 1) {
+            // Last instalment or rounding catch: take all remaining
+            $principal = $opening_balance;
+        }
+
+        // Apply rules: interest is % of current OB
+        $interest = round($opening_balance * $interest_rate, 2);
+        
+        $total_payment = round($principal + $interest + $mgmt_fee, 2);
+        $closing_balance = max(0, round($opening_balance - $principal, 2));
+        
+        $new_status = 'Pending';
+        $new_balance_rem = $total_payment;
+
+        $update_query = "UPDATE loan_instalments SET 
+            opening_balance = ?,
+            principal_amount = ?,
+            interest_amount = ?,
+            management_fee = ?,
+            total_payment = ?,
+            closing_balance = ?,
+            balance_remaining = ?,
+            status = ?,
+            updated_at = NOW()
+            WHERE instalment_id = ?";
+        $upd_stmt = $conn->prepare($update_query);
+        $upd_stmt->bind_param("dddddddsi", 
+            $opening_balance,
+            $principal,
+            $interest,
+            $mgmt_fee,
+            $total_payment,
+            $closing_balance,
+            $new_balance_rem,
+            $new_status,
+            $inst_id
+        );
+        $upd_stmt->execute();
+        $upd_stmt->close();
+
+        $opening_balance = $closing_balance;
+        if ($opening_balance <= 0) {
+            // If loan is paid early, zero out remaining
+            for ($j = $i + 1; $j < $num_remaining; $j++) {
+                $future_id = $future_instalments[$j]['instalment_id'];
+                $conn->query("UPDATE loan_instalments SET opening_balance=0, principal_amount=0, interest_amount=0, total_payment=0, closing_balance=0, balance_remaining=0, status='Fully Paid' WHERE instalment_id=$future_id");
+            }
+            break;
+        }
+    }
+}
+
+function PMT($rate, $nper, $pv) {
+    if ($rate == 0) return -$pv / $nper;
+    return -$pv * ($rate * pow(1 + $rate, $nper)) / (pow(1 + $rate, $nper) - 1);
+}
+
+function IPMT($rate, $period, $nper, $pv) {
+    if ($period == 1) return -$pv * $rate;
+    $pmt = PMT($rate, $nper, $pv);
+    $remaining_balance = $pv;
+    for ($i = 1; $i < $period; $i++) {
+        $interest = -$remaining_balance * $rate;
+        $principal = $pmt - $interest;
+        $remaining_balance += $principal;
+    }
+    return -$remaining_balance * $rate;
+}
+
+function PPMT($rate, $period, $nper, $pv) {
+    return PMT($rate, $nper, $pv) - IPMT($rate, $period, $nper, $pv);
+}
+
 // Initialize variables
 $success_message = '';
 $error_message = '';
@@ -342,7 +463,36 @@ try {
                         $upd->execute();
                         $upd->close();
 
+
                         $total_principal_credited += $principal_paid_now;
+
+                        // --- RECORD IN LOAN_PAYMENTS TABLE ---
+                        $month_paid = date('F Y', strtotime($payment_date));
+                        $pmt_sql = "INSERT INTO loan_payments (
+                                        loan_id, loan_instalment_id, month_paid, payment_date, 
+                                        beginning_balance, payment_amount, interest_amount, 
+                                        principal_amount, monitoring_fee, penalties, 
+                                        payment_method, reference_number, notes, created_at
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+                        $pmt_stmt = $conn->prepare($pmt_sql);
+                        $pmt_notes = "Prepayment Allocation. IsCurrent: " . ($is_current ? 'Yes' : 'No');
+                        $pmt_stmt->bind_param("iisssdddddsss", 
+                            $loan_id, 
+                            $inst_id, 
+                            $month_paid, 
+                            $payment_date,
+                            $inst_row['opening_balance'],
+                            $instalment_paid,
+                            $interest_paid_now,
+                            $principal_paid_now,
+                            $mgmt_paid_now,
+                            $penalty_null = 0,
+                            $payment_method,
+                            $payment_reference,
+                            $pmt_notes
+                        );
+                        $pmt_stmt->execute();
+                        $pmt_stmt->close();
                     }
 
                     if ($total_future_interest_waived > 0 || $total_future_mgmt_waived > 0) {
@@ -488,7 +638,7 @@ try {
                 $conn->begin_transaction();
                 
                 try {
-                    $get_instalment_query = "SELECT balance_remaining, total_payment 
+                    $get_instalment_query = "SELECT opening_balance, balance_remaining, total_payment, instalment_number
                                             FROM loan_instalments WHERE instalment_id = ?";
                     $get_instalment_stmt = $conn->prepare($get_instalment_query);
                     $get_instalment_stmt->bind_param("i", $instalment_id);
@@ -502,7 +652,9 @@ try {
                     }
                     
                     $current_balance   = floatval($current_instalment['balance_remaining']);
+                    $current_opening   = floatval($current_instalment['opening_balance']);
                     $total_payment_due = floatval($current_instalment['total_payment']);
+                    $current_inst_num  = intval($current_instalment['instalment_number']);
                     
                     $update_days_query = "UPDATE loan_instalments 
                                         SET days_overdue = ?,
@@ -641,8 +793,37 @@ try {
                         ]);
                     }
                     
-                    $new_balance_remaining = max(0, $current_balance - $actual_payment_amount);
+                    
+                    // --- RECORD IN LOAN_PAYMENTS TABLE (Required for History & Deletion) ---
+                    $month_paid = date('F Y', strtotime($payment_date));
+                    $pmt_sql = "INSERT INTO loan_payments (
+                                    loan_id, loan_instalment_id, month_paid, payment_date, 
+                                    beginning_balance, payment_amount, interest_amount, 
+                                    principal_amount, monitoring_fee, penalties, 
+                                    payment_method, reference_number, notes, created_at
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+                    $pmt_stmt = $conn->prepare($pmt_sql);
+                    $pmt_notes = "Recorded via Record Payment module. Narration: " . $narration;
+                    $pmt_stmt->bind_param("iisssdddddsss", 
+                        $loan_id, 
+                        $instalment_id, 
+                        $month_paid, 
+                        $payment_date,
+                        $current_balance,
+                        $actual_payment_amount,
+                        $interest_paid,
+                        $principal_paid,
+                        $mgmt_fee_paid,
+                        $penalty_paid,
+                        $payment_method,
+                        $reference_number,
+                        $pmt_notes
+                    );
+                    $pmt_stmt->execute();
+                    $pmt_stmt->close();
+
                     $total_paid = $actual_payment_amount - $penalty_paid;
+                    $new_balance_remaining = max(0, $current_balance - $total_paid);
                     
                     if ($new_balance_remaining <= 0) {
                         $new_status = 'Fully Paid';
@@ -651,6 +832,10 @@ try {
                     } else {
                         $new_status = 'Pending';
                     }
+
+                    // Calculate the actual closing balance for the current instalment row
+                    // This is the opening balance minus the principal paid in this transaction.
+                    $actual_closing_balance_for_row = max(0, $current_opening - $principal_paid);
                     
                     $update_instalment_query = "UPDATE loan_instalments 
                                             SET paid_amount          = paid_amount + ?,
@@ -658,6 +843,7 @@ try {
                                                 interest_paid        = interest_paid + ?,
                                                 management_fee_paid  = management_fee_paid + ?,
                                                 balance_remaining    = ?,
+                                                closing_balance      = ?,
                                                 penalty_paid         = penalty_paid + ?,
                                                 status               = ?,
                                                 days_overdue         = ?,
@@ -665,12 +851,13 @@ try {
                                                 updated_at           = NOW()
                                             WHERE instalment_id = ?";
                     $update_stmt = $conn->prepare($update_instalment_query);
-                    $update_stmt->bind_param("ddddddsisi", 
+                    $update_stmt->bind_param("dddddddsisi", 
                         $total_paid,
                         $principal_paid,
                         $interest_paid,
                         $mgmt_fee_paid,
                         $new_balance_remaining,
+                        $actual_closing_balance_for_row,
                         $penalty_paid,
                         $new_status,
                         $days_overdue,
@@ -679,6 +866,38 @@ try {
                     );
                     $update_stmt->execute();
                     $update_stmt->close();
+
+                    // --- LOAN PORTFOLIO SYNC ---
+                    // Automatically update summary totals in loan_portfolio
+                    $portfolio_sync = "UPDATE loan_portfolio SET 
+                                        total_paid = total_paid + ?,
+                                        total_principal_paid = total_principal_paid + ?,
+                                        total_interest_paid = total_interest_paid + ?,
+                                        total_management_fees_paid = total_management_fees_paid + ?,
+                                        principal_outstanding = principal_outstanding - ?,
+                                        interest_outstanding = interest_outstanding - ?,
+                                        total_outstanding = principal_outstanding + interest_outstanding,
+                                        updated_at = NOW()
+                                      WHERE loan_id = ?";
+                    $port_stmt = $conn->prepare($portfolio_sync);
+                    $port_stmt->bind_param("ddddddi", 
+                        $actual_payment_amount,
+                        $principal_paid,
+                        $interest_paid,
+                        $mgmt_fee_paid,
+                        $principal_paid,
+                        $interest_paid,
+                        $loan_id
+                    );
+                    $port_stmt->execute();
+                    $port_stmt->close();
+
+                    // --- EARLY REPAYMENT / SCHEDULE RECALCULATION ---
+                        
+                        // Trigger recalculation for the rest of the schedule
+                        if ($principal_paid > 0) {
+                            recalculateRemainingSchedule($conn, $loan_id, $current_inst_num, $actual_closing_balance_for_row, $interest_rate, $mgmt_fee_rate);
+                        }
 
                     $check_pending_stmt = $conn->prepare(
                         "SELECT COUNT(*) AS pending_count FROM loan_instalments 
@@ -1515,9 +1734,15 @@ function updatePenalties() {
     document.getElementById('penalties').value              = adjusted.toFixed(2);
 
     const finalAmt = currentBalance + adjusted;
+
+    // Base balance from DB (should include old penalties already corrected)
+    document.getElementById('summary_balance').textContent  = formatNumber(currentBalance);
+    
+    // Final Amount to Pay includes the new penalties
     document.getElementById('summary_final').textContent    = formatNumber(finalAmt);
     document.getElementById('actual_payment_display').value = formatNumberWithCommas(finalAmt.toFixed(2));
     document.getElementById('actual_payment_amount').value  = finalAmt.toFixed(2);
+    document.getElementById('summary_balance').title        = 'Base balance remaining from previous payments';
 }
 
 function openDaysOverdueModal(button) {

@@ -273,15 +273,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username']) && isset(
                         Sign In Now <i class="bi bi-arrow-right-short ms-1"></i>
                     </button>
                     
-                    <?php if ($login_error === true): ?>
+                    <?php if ($login_error === true && $_SERVER['REQUEST_METHOD'] === 'POST'): ?>
                     <div class="alert" id="errorAlert">
                         <i class="bi bi-exclamation-circle-fill me-2"></i> Invalid credentials.
                     </div>
-                    <script>
-                        const container = document.querySelector('.login-container');
-                        container.classList.add('shake');
-                        setTimeout(() => container.classList.remove('shake'), 400);
-                    </script>
+                    <?php endif; ?>
+
+                    <?php if (isset($_GET['logout']) && $_GET['logout'] === 'success'): ?>
+                    <div class="alert alert-success bg-success-subtle text-success border-0" id="logoutAlert">
+                        <i class="bi bi-check-circle-fill me-2"></i> Logged out successfully.
+                    </div>
                     <?php endif; ?>
                 </form>
 

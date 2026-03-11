@@ -168,7 +168,7 @@ function canSeeReports($role) {
             <?php endif; ?>
             
             <!-- ── Approvals (Hide for Developer) ── -->
-            <?php if ($user_role !== 'Developer'): 
+            <?php if (strtolower($user_role) !== 'developer'): 
                 $approval_conn = getConnection();
                 $pending_approvals_count = $approval_conn ? countPendingApprovals($approval_conn) : 0;
                 if ($approval_conn) $approval_conn->close();

@@ -115,6 +115,7 @@ if ($check_payments_table && $check_payments_table->num_rows > 0) {
     $s = $conn->prepare(
         "SELECT payment_id, loan_id, payment_amount, payment_date,
                 payment_method, reference_number,
+                interest_amount, principal_amount, monitoring_fee, penalties,
                 created_at
          FROM loan_payments WHERE loan_id = ? ORDER BY payment_date ASC"
     );
@@ -366,17 +367,17 @@ $total_outstanding     = floatval(isset($loan['total_outstanding'])     ? $loan[
 $number_of_instalments = intval(isset($loan['number_of_instalments'])   ? $loan['number_of_instalments'] : 0);
 $instalment_amount     = floatval(isset($loan['instalment_amount'])     ? $loan['instalment_amount']     : 0);
 
+// loan_payments has no payment_status column — every record is a confirmed payment
 $total_paid_from_pmts = 0;
 foreach ($payments as $p) {
-    if ((isset($p['payment_status']) ? $p['payment_status'] : '') === 'Completed') {
-        $total_paid_from_pmts += floatval($p['payment_amount']);
-    }
+    $total_paid_from_pmts += floatval($p['payment_amount'] ?? 0);
 }
 $total_paid_from_inst = 0;
 foreach ($instalments as $i2) {
     $total_paid_from_inst += floatval(isset($i2['amount_paid']) ? $i2['amount_paid'] : 0);
 }
-$total_paid = max($total_paid_from_pmts, $total_paid_from_inst);
+// Use payment records if they exist (more accurate), otherwise fall back to instalment paid_amount sum
+$total_paid = ($total_paid_from_pmts > 0) ? $total_paid_from_pmts : $total_paid_from_inst;
 if ($total_paid == 0 && $disbursement_amount > 0 && $total_outstanding > 0) {
     $total_paid = $disbursement_amount - $total_outstanding;
 }
@@ -540,15 +541,32 @@ body { font-size: 12px !important; background: #f4f6fb; }
     <div class="card mb-3">
         <div class="card-header bg-success text-white"><h5 class="mb-0"><i class="fas fa-file-invoice-dollar me-2"></i>Loan Information</h5></div>
         <div class="card-body">
+            <?php
+            // Calculate penalty-inclusive stats from installments
+            $sum_penalties_due  = 0;
+            $sum_penalties_paid = 0;
+            $sum_schedule_bal   = 0;
+            if (isset($instalments) && is_array($instalments)) {
+                foreach ($instalments as $inst_row) {
+                    $sum_penalties_due  += floatval($inst_row['penalty_amount'] ?? 0);
+                    $sum_penalties_paid += floatval($inst_row['penalty_paid'] ?? 0);
+                    $sum_schedule_bal   += floatval($inst_row['balance_remaining'] ?? 0);
+                }
+            }
+            $remaining_penalties = max(0, $sum_penalties_due - $sum_penalties_paid);
+            $final_outstanding = $sum_schedule_bal + $remaining_penalties;
+            ?>
             <table class="table table-borderless mb-0">
-                <tr><td class="info-label" width="42%">Loan Number:</td><td class="fw-bold"><?php echo htmlspecialchars(isset($loan['loan_number']) ? $loan['loan_number'] : 'N/A'); ?></td></tr>
-                <tr><td class="info-label">Disbursement Amount:</td><td class="fw-bold text-primary">FRW <?php echo number_format($disbursement_amount,2); ?></td></tr>
-                <tr><td class="info-label">Interest Rate:</td><td><?php echo number_format(isset($loan['interest_rate']) ? $loan['interest_rate'] : 0,2); ?>%</td></tr>
-                <tr><td class="info-label">Instalments:</td><td><?php echo $number_of_instalments; ?> months</td></tr>
-                <tr><td class="info-label">Monthly Instalment:</td><td class="fw-bold">FRW <?php echo number_format($instalment_amount,2); ?></td></tr>
-                <tr><td class="info-label">Total Expected:</td><td class="fw-bold">FRW <?php echo number_format($total_exp_inst,2); ?></td></tr>
-                <?php if (!empty($loan['disbursement_date']) && $loan['disbursement_date'] !== '0000-00-00'): ?><tr><td class="info-label">Disbursement Date:</td><td><?php echo fmtDate($loan['disbursement_date']); ?></td></tr><?php endif; ?>
-                <?php if (!empty($loan['maturity_date']) && $loan['maturity_date'] !== '0000-00-00'): ?><tr><td class="info-label">Maturity Date:</td><td><?php echo fmtDate($loan['maturity_date']); ?></td></tr><?php endif; ?>
+                <tr><td class="info-label" width="45%">Loan Number:</td><td class="fw-bold"><?php echo htmlspecialchars(isset($loan['loan_number']) ? $loan['loan_number'] : 'N/A'); ?></td></tr>
+                <tr><td class="info-label">Disbursement Amount:</td><td class="fw-bold text-primary">FRW <?php echo number_format($disbursement_amount > 0 ? $disbursement_amount : array_sum(array_column($instalments, 'principal_amount')), 2); ?></td></tr>
+                <tr class="border-top"><td class="info-label">Total Expected (Schedule):</td><td class="fw-bold">FRW <?php echo number_format($total_exp_inst > 0 ? $total_exp_inst : array_sum(array_column($instalments, 'total_amount')), 2); ?></td></tr>
+                <tr><td class="info-label">Already Paid:</td><td class="fw-bold text-success">FRW <?php echo number_format($total_paid, 2); ?></td></tr>
+                <tr><td class="info-label">Penalties Paid:</td><td class="text-danger">FRW <?php echo number_format($sum_penalties_paid,2); ?></td></tr>
+                <tr class="bg-light shadow-sm"><td class="info-label fw-bold">Outstanding Balance:</td><td class="fw-bold text-danger" style="font-size:1.15rem;">FRW <?php echo number_format($final_outstanding,2); ?></td></tr>
+                <?php if ($remaining_penalties > 0): ?>
+                <tr><td class="info-label small text-muted">Includes FRW <?php echo number_format($remaining_penalties,2); ?> remaining penalties</td><td></td></tr>
+                <?php endif; ?>
+                <?php if (!empty($loan['disbursement_date'])): ?><tr><td class="info-label">Disbursement Date:</td><td><?php echo fmtDate($loan['disbursement_date']); ?></td></tr><?php endif; ?>
             </table>
         </div>
     </div>
@@ -571,40 +589,66 @@ body { font-size: 12px !important; background: #f4f6fb; }
 </div>
 <?php endif; ?>
 
-<!-- Current loan recent payments -->
+<!-- Current loan payment history with delete buttons -->
 <?php if (!empty($payments)): ?>
 <div class="card mb-3">
     <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="fas fa-money-bill-wave me-2"></i>Recent Payments</h5>
-        <span class="badge bg-light text-dark"><?php echo count($payments); ?></span>
+        <h5 class="mb-0"><i class="fas fa-money-bill-wave me-2"></i>Payment History</h5>
+        <span class="badge bg-light text-dark"><?php echo count($payments); ?> payment(s)</span>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover table-striped mb-0">
+            <table class="table table-hover table-sm mb-0" style="font-size:.8rem;">
                 <thead class="table-dark">
-                    <tr><th>Date</th><th>Amount (FRW)</th><th>Method</th><th>Reference</th><th>Received By</th><th>Status</th></tr>
+                    <tr>
+                        <th>#</th>
+                        <th>Date</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-end">Principal</th>
+                        <th class="text-end">Interest</th>
+                        <th class="text-end">Fee</th>
+                        <th class="text-end">Penalty</th>
+                        <th>Method</th>
+                        <th>Reference</th>
+                        <th class="text-center no-print">Delete</th>
+                    </tr>
                 </thead>
                 <tbody>
-                <?php
-                $recent_payments = array_slice($payments, -5);
-                foreach ($recent_payments as $p):
-                    $p_completed = (isset($p['payment_status']) && $p['payment_status'] === 'Completed');
-                ?>
+                <?php foreach ($payments as $pi => $p): ?>
                 <tr>
-                    <td><?php echo fmtDate(isset($p['payment_date']) ? $p['payment_date'] : ''); ?></td>
-                    <td class="fw-bold text-success"><?php echo number_format(isset($p['payment_amount']) ? $p['payment_amount'] : 0,2); ?></td>
+                    <td class="text-muted"><?php echo $pi + 1; ?></td>
+                    <td><strong><?php echo fmtDate($p['payment_date'] ?? ''); ?></strong></td>
+                    <td class="text-end fw-bold text-success"><?php echo number_format($p['payment_amount'] ?? 0, 0); ?></td>
+                    <td class="text-end text-muted"><?php echo number_format($p['principal_amount'] ?? 0, 0); ?></td>
+                    <td class="text-end text-muted"><?php echo number_format($p['interest_amount'] ?? 0, 0); ?></td>
+                    <td class="text-end text-muted"><?php echo number_format($p['monitoring_fee'] ?? 0, 0); ?></td>
+                    <td class="text-end text-danger"><?php echo number_format($p['penalties'] ?? 0, 0); ?></td>
                     <td><?php echo !empty($p['payment_method']) ? '<span class="badge bg-info text-dark">'.htmlspecialchars($p['payment_method']).'</span>' : '—'; ?></td>
                     <td><?php echo !empty($p['reference_number']) ? '<code>'.htmlspecialchars($p['reference_number']).'</code>' : '—'; ?></td>
-                    <td><?php echo htmlspecialchars(isset($p['received_by']) ? $p['received_by'] : '—'); ?></td>
-                    <td><span class="badge bg-<?php echo $p_completed ? 'success' : 'warning text-dark'; ?>"><?php echo htmlspecialchars(isset($p['payment_status']) ? $p['payment_status'] : ''); ?></span></td>
+                    <td class="text-center no-print">
+                        <?php $del_amt = number_format($p['payment_amount'] ?? 0, 0); $del_pid = intval($p['payment_id'] ?? 0); ?>
+                        <button class="btn btn-outline-danger btn-sm px-2 py-0"
+                                title="Delete and reverse this payment"
+                                onclick="if(confirm('Delete FRW <?php echo $del_amt; ?>? This REVERSES the balance. Cannot be undone.')) window.location.href='?page=delete_payment&payment_id=<?php echo $del_pid; ?>&loan_id=<?php echo $loan_id; ?>';">
+                            <i class="fas fa-trash-alt"></i> Del
+                        </button>
+                    </td>
                 </tr>
-                <?php endforeach; ?>
+                <?php endforeach; ?>
                 </tbody>
+                <tfoot class="table-secondary fw-bold">
+                    <tr>
+                        <td colspan="2">TOTAL</td>
+                        <td class="text-end text-success"><?php echo number_format(array_sum(array_column($payments, 'payment_amount')), 0); ?></td>
+                        <td class="text-end"><?php echo number_format(array_sum(array_column($payments, 'principal_amount')), 0); ?></td>
+                        <td class="text-end"><?php echo number_format(array_sum(array_column($payments, 'interest_amount')), 0); ?></td>
+                        <td class="text-end"><?php echo number_format(array_sum(array_column($payments, 'monitoring_fee')), 0); ?></td>
+                        <td class="text-end text-danger"><?php echo number_format(array_sum(array_column($payments, 'penalties')), 0); ?></td>
+                        <td colspan="3"></td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
-        <?php if (count($payments) > 5): ?>
-        <p class="text-center text-muted small py-1 mb-0">Showing last 5 of <?php echo count($payments); ?> payments</p>
-        <?php endif; ?>
     </div>
 </div>
 <?php endif; ?>
@@ -992,50 +1036,47 @@ body { font-size: 12px !important; background: #f4f6fb; }
                         <thead class="table-dark">
                             <tr>
                                 <th>#</th>
-                                <th>Payment Date</th>
-                                <th class="text-end">Amount (FRW)</th>
+                                <th>Date</th>
+                                <th class="text-end">Total (FRW)</th>
+                                <th class="text-end small">Principal</th>
+                                <th class="text-end small">Interest</th>
+                                <th class="text-end small">Fees</th>
+                                <th class="text-end small">Penalties</th>
                                 <th>Method</th>
-                                <th>Reference #</th>
-                                <th>Received By</th>
-                                <th class="text-center">Status</th>
-                                <th>Recorded On</th>
+                                <th>Ref #</th>
+                                <th class="text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                         <?php
                         $running_total = 0;
                         foreach ($pl['payments'] as $pi => $p):
-                            $p_status   = strtolower(isset($p['payment_status']) ? $p['payment_status'] : '');
-                            $p_done     = ($p_status === 'completed');
+                            $p_status   = strtolower(isset($p['payment_status']) ? $p['payment_status'] : 'completed');
+                            $p_done     = ($p_status === 'completed' || $p_status === 'paid' || $p_status === 'success');
                             $p_failed   = (strpos($p_status, 'fail') !== false || strpos($p_status, 'reject') !== false || strpos($p_status, 'cancel') !== false);
                             $prow_class = $p_done ? 'pmt-completed' : ($p_failed ? 'pmt-failed' : 'pmt-pending');
                             $pamt       = floatval(isset($p['payment_amount']) ? $p['payment_amount'] : 0);
                             if ($p_done) $running_total += $pamt;
-                            $p_badge_c  = $p_done ? 'success' : ($p_failed ? 'danger' : 'warning text-dark');
                         ?>
-                        <tr class="<?php echo $prow_class; ?>">
+                         <tr class="<?php echo $prow_class; ?>">
                             <td class="text-muted"><?php echo $pi+1; ?></td>
-                            <td><i class="fas fa-calendar me-1 text-muted"></i>
-                                <strong><?php echo fmtDate(isset($p['payment_date']) ? $p['payment_date'] : ''); ?></strong></td>
+                            <td><strong><?php echo fmtDate(isset($p['payment_date']) ? $p['payment_date'] : ''); ?></strong></td>
                             <td class="text-end fw-bold <?php echo $p_done ? 'text-success' : 'text-muted'; ?>">
                                 <?php echo number_format($pamt,2); ?>
                             </td>
-                            <td><?php echo !empty($p['payment_method'])
-                                    ? '<span class="badge bg-info text-dark">'.htmlspecialchars($p['payment_method']).'</span>'
-                                    : '<span class="text-muted">—</span>'; ?>
-                            </td>
-                            <td><?php echo !empty($p['reference_number'])
-                                    ? '<code>'.htmlspecialchars($p['reference_number']).'</code>'
-                                    : '<span class="text-muted">—</span>'; ?>
-                            </td>
-                            <td><?php echo htmlspecialchars(isset($p['received_by']) ? $p['received_by'] : '—'); ?></td>
+                            <td class="text-end text-muted small"><?php echo number_format($p['principal_amount'] ?? 0, 2); ?></td>
+                            <td class="text-end text-muted small"><?php echo number_format($p['interest_amount'] ?? 0, 2); ?></td>
+                            <td class="text-end text-muted small"><?php echo number_format($p['monitoring_fee'] ?? 0, 2); ?></td>
+                            <td class="text-end text-danger small"><?php echo number_format($p['penalties'] ?? 0, 2); ?></td>
+                            <td><?php echo !empty($p['payment_method']) ? htmlspecialchars($p['payment_method']) : '—'; ?></td>
+                            <td><code><?php echo htmlspecialchars($p['reference_number'] ?? '—'); ?></code></td>
                             <td class="text-center">
-                                <span class="badge bg-<?php echo $p_badge_c; ?>">
-                                    <?php echo htmlspecialchars(isset($p['payment_status']) ? $p['payment_status'] : ''); ?>
-                                </span>
-                            </td>
-                            <td class="text-muted" style="font-size:.67rem;">
-                                <?php echo fmtDate(isset($p['created_at']) ? $p['created_at'] : ''); ?>
+                                <?php if ($p_done): ?>
+                                <button class="btn btn-outline-danger btn-sm py-1" 
+                                        onclick="if(confirm('🚨 WARNING: Delete this payment? \n\nThis reverses the balance and ledger.')) window.location.href='?page=delete_payment&payment_id=<?php echo $p['payment_id']; ?>&loan_id=<?php echo $plid; ?>';">
+                                    <i class="fas fa-trash-alt"></i> Delete
+                                </button>
+                                <?php endif; ?>
                             </td>
                         </tr>
                         <?php endforeach; ?>

@@ -24,7 +24,7 @@ session_destroy();
 echo "<script>
     localStorage.removeItem('authSession');
     localStorage.removeItem('authExpiry');
-    window.location.href='login.php';
+    window.location.href='login.php?logout=success';
 </script>";
 exit;
 ?>

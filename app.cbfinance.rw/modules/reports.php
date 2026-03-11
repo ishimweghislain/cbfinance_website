@@ -52,7 +52,8 @@ function buildPortfolioQuery($conn, $sd, $ed, $cf, $sf) {
         (SELECT MAX(days_overdue) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND days_overdue > 0) as max_days_overdue,
         (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_instalments,
         (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NOT NULL) as paid_instalments,
-        (SELECT SUM(paid_amount) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_collected
+        (SELECT SUM(paid_amount) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_collected,
+        (SELECT SUM(penalty_paid) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_penalties_paid
         FROM loan_portfolio lp LEFT JOIN customers c ON lp.customer_id = c.customer_id
         WHERE {$wc} ORDER BY lp.created_at DESC";
 }
@@ -115,9 +116,9 @@ function buildPaymentsQuery($conn, $sd, $ed, $cf) {
     if ($cf) $w[] = "lp.customer_id = " . intval($cf);
     $wc = implode(' AND ', $w);
     return "SELECT li.instalment_id, li.loan_number, li.instalment_number, li.due_date, li.payment_date,
-        li.principal_amount, li.interest_amount, li.management_fee, li.monitoring_fee_total,
+        li.principal_amount, li.interest_amount, li.management_fee,
         li.total_payment, li.paid_amount, li.principal_paid, li.interest_paid,
-        li.management_fee_paid, li.balance_remaining, c.customer_name, c.customer_code, lp.loan_status
+        li.management_fee_paid, li.penalty_paid, li.balance_remaining, c.customer_name, c.customer_code, lp.loan_status
         FROM loan_instalments li
         LEFT JOIN loan_portfolio lp ON li.loan_id = lp.loan_id
         LEFT JOIN customers c ON lp.customer_id = c.customer_id
@@ -161,6 +162,7 @@ function buildSummaryQuery($conn, $sd, $ed) {
         SUM(lp.total_paid) as total_paid, SUM(lp.total_principal_paid) as total_principal_paid,
         SUM(lp.total_interest_paid) as total_interest_paid,
         SUM(lp.total_management_fees_paid) as total_mgmt_fees_paid,
+        (SELECT SUM(penalty_paid) FROM loan_instalments li JOIN loan_portfolio lp2 ON li.loan_id = lp2.loan_id WHERE lp2.disbursement_date BETWEEN '{$sd}' AND '{$ed}') as total_penalties_paid,
         SUM(CASE WHEN lp.loan_status='Active'    THEN 1 ELSE 0 END) as active_loans,
         SUM(CASE WHEN lp.loan_status='Overdue'   THEN 1 ELSE 0 END) as overdue_loans,
         SUM(CASE WHEN lp.loan_status='Suspended' THEN 1 ELSE 0 END) as suspended_loans,
@@ -169,7 +171,6 @@ function buildSummaryQuery($conn, $sd, $ed) {
         SUM(COALESCE(lp.collateral_net_value,0)) as total_collateral_value
         FROM loan_portfolio lp
         WHERE lp.disbursement_date BETWEEN '{$sd}' AND '{$ed}'";
-
 }
 
 // ─── CSV GENERATOR ───────────────────────────────────────────────────────────
@@ -220,16 +221,14 @@ function generateCsv($data, $report_type, $title, $sd, $ed) {
 function getHeaders($type) {
     switch ($type) {
         case 'portfolio':
-            // CHANGED: removed 'Total Paid' column
             return ['Loan Number', 'Customer Name', 'Customer Code', 'Phone', 'Loan Amount',
-                    'Total Disbursed', 'Total Outstanding', 'Interest Rate',
+                    'Total Disbursed', 'Total Paid', 'Penalties Paid', 'Total Outstanding', 'Interest Rate',
                     'No. of Instalments', 'Disbursement Date', 'Maturity Date', 'Collateral Value',
                     'Loan Status', 'Days Overdue'];
         case 'instalments':
-            // CHANGED: removed 'Monitoring Fee', added 'Customer Name'
             return ['Loan Number', 'Customer Name', 'Instalment #', 'Due Date', 'Payment Date',
                     'Opening Balance', 'Closing Balance', 'Principal', 'Interest', 'Mgmt Fee',
-                    'Total Payment', 'Paid Amount', 'Balance Remaining', 'Days Overdue', 'Status'];
+                    'Total Payment', 'Paid (P+I+F)', 'Penalty Paid', 'Total Collected', 'Balance Remaining', 'Days Overdue', 'Status'];
         case 'customers':
             return ['Customer Code', 'Customer Name', 'Phone', 'Email', 'Address',
                     'Total Loans', 'Total Disbursed', 'Total Outstanding', 'Total Paid', 'Last Loan Date'];
@@ -238,7 +237,7 @@ function getHeaders($type) {
                     'Principal', 'Interest', 'Mgmt Fee', 'Total Due', 'Balance Remaining', 'Provision Category'];
         case 'payments':
             return ['Loan Number', 'Customer Name', 'Instalment #', 'Due Date', 'Payment Date',
-                    'Principal Paid', 'Interest Paid', 'Mgmt Fee Paid', 'Total Paid', 'Balance Remaining'];
+                    'Principal Paid', 'Interest Paid', 'Mgmt Fee Paid', 'Penalty Paid', 'Total Collected', 'Balance Remaining'];
         case 'provisions':
             return ['Loan Number', 'Customer Name', 'Total Outstanding', 'Collateral Net Value',
                     'Exposure', 'Max Days Overdue', 'Provision Rate', 'Provision Amount',
@@ -257,15 +256,18 @@ function formatRows($type, $data) {
 
     switch ($type) {
         case 'portfolio':
-            // CHANGED: removed total_paid accumulation and column; Days Overdue only when > 0
-            $td = $to = 0;
+            $td = $to = $tp = $tpen = 0;
             foreach ($data as $r) {
                 $td += $r['total_disbursed'];
                 $to += $r['total_outstanding'];
+                $tp += $r['total_paid'];
+                $tpen += $r['total_penalties_paid'];
                 $rows[] = [
                     $r['loan_number'], $r['customer_name'], $r['customer_code'], $r['phone'],
                     number_format($r['loan_amount'] ?? 0, 2),
                     number_format($r['total_disbursed'], 2),
+                    number_format($r['total_paid'], 2),
+                    number_format($r['total_penalties_paid'] ?? 0, 2),
                     number_format($r['total_outstanding'], 2),
                     $r['interest_rate'] . '%',
                     $r['number_of_instalments'] ?? '',
@@ -277,15 +279,16 @@ function formatRows($type, $data) {
                 ];
             }
             if (!empty($data)) {
-                $totals = array_fill(0, 14, '');
+                $totals = array_fill(0, 16, '');
                 $totals[0] = 'TOTAL (' . count($data) . ' loans)';
                 $totals[5] = number_format($td, 2);
-                $totals[6] = number_format($to, 2);
+                $totals[6] = number_format($tp, 2);
+                $totals[7] = number_format($tpen, 2);
+                $totals[8] = number_format($to, 2);
             }
             break;
 
         case 'instalments':
-            // CHANGED: removed monitoring_fee_total column; added customer_name; Days Overdue only when > 0
             foreach ($data as $r) {
                 $status = $r['payment_date'] ? 'Paid' : ($r['days_overdue'] > 0 ? 'Overdue' : 'Pending');
                 $rows[] = [
@@ -301,6 +304,8 @@ function formatRows($type, $data) {
                     number_format($r['management_fee'], 2),
                     number_format($r['total_payment'], 2),
                     number_format($r['paid_amount'], 2),
+                    number_format($r['penalty_paid'] ?? 0, 2),
+                    number_format($r['paid_amount'] + ($r['penalty_paid'] ?? 0), 2),
                     number_format($r['balance_remaining'], 2),
                     ($r['days_overdue'] > 0) ? $r['days_overdue'] : '',
                     $status,
@@ -338,9 +343,10 @@ function formatRows($type, $data) {
             break;
 
         case 'payments':
-            $tp = 0;
+            $tp = 0; $tpen = 0;
             foreach ($data as $r) {
                 $tp += $r['paid_amount'];
+                $tpen += $r['penalty_paid'];
                 $rows[] = [
                     $r['loan_number'], $r['customer_name'], $r['instalment_number'],
                     $r['due_date']     ? date('Y-m-d', strtotime($r['due_date']))     : '',
@@ -348,14 +354,16 @@ function formatRows($type, $data) {
                     number_format($r['principal_paid'], 2),
                     number_format($r['interest_paid'], 2),
                     number_format($r['management_fee_paid'], 2),
-                    number_format($r['paid_amount'], 2),
+                    number_format($r['penalty_paid'], 2),
+                    number_format($r['paid_amount'] + $r['penalty_paid'], 2),
                     number_format($r['balance_remaining'], 2),
                 ];
             }
             if (!empty($data)) {
-                $totals = array_fill(0, 10, '');
+                $totals = array_fill(0, 11, '');
                 $totals[0] = 'TOTAL COLLECTED';
-                $totals[8] = number_format($tp, 2);
+                $totals[8] = number_format($tpen, 2);
+                $totals[9] = number_format($tp + $tpen, 2);
             }
             break;
 
@@ -392,10 +400,11 @@ function formatRows($type, $data) {
                     ['Total Customers',        number_format($r['total_customers'])],
                     ['Total Disbursed',        number_format($r['total_disbursed'], 2)],
                     ['Total Outstanding',      number_format($r['total_outstanding'], 2)],
-                    ['Total Collected',        number_format($r['total_paid'], 2)],
+                    ['Total Collected (Inc Pen)', number_format($r['total_paid'], 2)],
                     ['Total Principal Paid',   number_format($r['total_principal_paid'], 2)],
                     ['Total Interest Paid',    number_format($r['total_interest_paid'], 2)],
                     ['Total Mgmt Fees Paid',   number_format($r['total_mgmt_fees_paid'], 2)],
+                    ['Total Penalties Paid',   number_format($r['total_penalties_paid'], 2)],
                     ['', ''],
                     ['── LOAN STATUS BREAKDOWN ──────────────', ''],
                     ['Active Loans',           number_format($r['active_loans'])],

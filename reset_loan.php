@@ -15,22 +15,31 @@ try {
     $loan = $res->fetch_assoc();
     if (!$loan) die("Loan ID $loan_id not found.");
 
-    $amount = floatval($loan['disbursement_amount']);
+    // ── Use correct columns based on DB schema ───────────────────────────────
+    // Based on loan_portfolio table structure:
+    // loan_amount = Principal given
+    // total_disbursed = loan_amount + mgmt_fee (This is the principal to be repaid)
+    // total_interest = Total expected interest
+    
+    $amount = floatval($loan['total_disbursed'] ?? $loan['loan_amount']);
+    $expected_interest = floatval($loan['total_interest']);
     $int_rate = floatval($loan['interest_rate']) / 100;
     
     // 2. Delete ALL payments and ledgers tied to this loan
+    // Delete ledger entries related to loan payments for this loan
     $conn->query("DELETE FROM ledger WHERE reference_type = 'loan_payment' AND reference_id IN (SELECT instalment_id FROM loan_instalments WHERE loan_id = $loan_id)");
     $conn->query("DELETE FROM loan_payments WHERE loan_id = $loan_id");
 
     // 3. Reset Loan Portfolio Summary
+    // We reset outstandings to their initial values
     $conn->query("UPDATE loan_portfolio SET 
         total_paid = 0,
         total_principal_paid = 0,
         total_interest_paid = 0,
         total_management_fees_paid = 0,
-        principal_outstanding = disbursement_amount,
-        interest_outstanding = total_expected_interest,
-        total_outstanding = disbursement_amount + total_expected_interest,
+        principal_outstanding = $amount,
+        interest_outstanding = $expected_interest,
+        total_outstanding = $amount + $expected_interest,
         loan_status = 'Active'
         WHERE loan_id = $loan_id");
 

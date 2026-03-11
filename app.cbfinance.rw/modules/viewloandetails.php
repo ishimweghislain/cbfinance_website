@@ -362,10 +362,10 @@ if ($customer_id > 0 && !empty($current_disb_date)) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CURRENT LOAN STATISTICS
 // ═══════════════════════════════════════════════════════════════════════════════
-$disbursement_amount   = floatval(isset($loan['disbursement_amount'])   ? $loan['disbursement_amount']   : 0);
+$disbursement_amount   = floatval(isset($loan['total_disbursed']) ? $loan['total_disbursed'] : (isset($loan['loan_amount']) ? $loan['loan_amount'] : 0));
 $total_outstanding     = floatval(isset($loan['total_outstanding'])     ? $loan['total_outstanding']     : 0);
 $number_of_instalments = intval(isset($loan['number_of_instalments'])   ? $loan['number_of_instalments'] : 0);
-$instalment_amount     = floatval(isset($loan['instalment_amount'])     ? $loan['instalment_amount']     : 0);
+$instalment_amount     = floatval(isset($loan['instalment_amount'])     ? $loan['instalment_amount']     : (isset($loan['monthly_payment']) ? $loan['monthly_payment'] : 0));
 
 // loan_payments has no payment_status column — every record is a confirmed payment
 $total_paid_from_pmts = 0;

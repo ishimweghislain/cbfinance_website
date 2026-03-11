@@ -58,7 +58,7 @@ function buildPortfolioQuery($conn, $sd, $ed, $cf, $sf) {
     $wc = implode(' AND ', $w);
     return "SELECT lp.*, c.customer_name, c.customer_code, c.phone, c.email, c.address,
         (SELECT MAX(days_overdue) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND days_overdue > 0) as max_days_overdue,
-        (CASE WHEN lp.days_overdue > 0 THEN lp.total_outstanding ELSE 0 END) as total_overdue_amount,
+        (CASE WHEN (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0 THEN lp.total_outstanding ELSE 0 END) as total_overdue_amount,
         (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_instalments,
         (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NOT NULL) as paid_instalments,
         (SELECT SUM(paid_amount) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_collected,
@@ -180,7 +180,7 @@ function buildSummaryQuery($conn, $sd, $ed) {
         SUM(lp.total_management_fees_paid) as total_mgmt_fees_paid,
         (SELECT SUM(penalty_paid) FROM loan_instalments li JOIN loan_portfolio lp2 ON li.loan_id = lp2.loan_id WHERE lp2.disbursement_date BETWEEN '{$sd}' AND '{$ed}') as total_penalties_paid,
         SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing') THEN 1 ELSE 0 END) as active_loans,
-        SUM(CASE WHEN lp.days_overdue > 0 AND lp.loan_status IN ('Active', 'Performing') THEN 1 ELSE 0 END) as overdue_loans,
+        SUM(CASE WHEN (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0 AND lp.loan_status IN ('Active', 'Performing') THEN 1 ELSE 0 END) as overdue_loans,
         SUM(CASE WHEN lp.loan_status='Suspended' THEN 1 ELSE 0 END) as suspended_loans,
         SUM(CASE WHEN lp.loan_status='Closed'    THEN 1 ELSE 0 END) as closed_loans,
         AVG(lp.interest_rate) as avg_interest_rate,

@@ -130,7 +130,12 @@ try {
     $stats['equity']['total_equity'] = $total_assets - $total_liabilities;
     
     // 13. Overdue Loans
-    $result = $conn->query("SELECT COUNT(*) as overdue_loans, COALESCE(SUM(total_outstanding), 0) as overdue_amount FROM loan_portfolio WHERE days_overdue > 0 AND loan_status = 'Active'");
+    $result = $conn->query("SELECT 
+        COUNT(*) as overdue_loans, 
+        COALESCE(SUM(total_outstanding), 0) as overdue_amount 
+        FROM loan_portfolio 
+        WHERE (days_overdue > 0 OR (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = loan_portfolio.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0)
+        AND loan_status IN ('Active', 'Performing', 'Overdue')");
     if ($result) {
         $stats['overdue'] = $result->fetch_assoc();
     }

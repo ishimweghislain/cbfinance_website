@@ -50,18 +50,37 @@ while ($loan = $res->fetch_assoc()) {
 
 echo "</ul>";
 
-// ── Step 3: Zero out ALL outstanding for Closed loans ──────────────────────
+// ── Step 3: Zero out ALL outstanding for Closed loans — one by one ──────────
 echo "<h3>🔒 Step 3: Zeroing outstanding for all Closed loans...</h3>";
-$closed_result = $conn->query("UPDATE loan_portfolio 
-    SET principal_outstanding = 0,
-        interest_outstanding  = 0,
-        total_outstanding     = 0,
-        overdue_amount        = 0,
-        days_overdue          = 0
-    WHERE loan_status = 'Closed'");
 
-$closed_count = $conn->affected_rows;
-echo "<p>✅ Zeroed outstanding for <strong>$closed_count Closed loans</strong>.</p>";
+$closed_loans = $conn->query("SELECT loan_id, loan_number FROM loan_portfolio WHERE loan_status = 'Closed'");
+$closed_count = 0;
+$closed_errors = 0;
+
+if ($closed_loans && $closed_loans->num_rows > 0) {
+    echo "<ul>";
+    while ($cl = $closed_loans->fetch_assoc()) {
+        $cid = intval($cl['loan_id']);
+        $ok = $conn->query("UPDATE loan_portfolio 
+            SET principal_outstanding = 0,
+                interest_outstanding  = 0,
+                total_outstanding     = 0,
+                overdue_amount        = 0,
+                days_overdue          = 0
+            WHERE loan_id = $cid");
+        if ($ok) {
+            $closed_count++;
+        } else {
+            $closed_errors++;
+            echo "<li style='color:red'>❌ Failed for {$cl['loan_number']}: " . $conn->error . "</li>";
+        }
+    }
+    echo "</ul>";
+}
+
+echo "<p>✅ Zeroed outstanding for <strong>$closed_count Closed loans</strong>.";
+if ($closed_errors > 0) echo " <span style='color:red'>⚠️ $closed_errors errors occurred.</span>";
+echo "</p>";
 
 // ── Step 4: Verification — check if any Closed loans still have residuals ──
 echo "<h3>🔍 Step 4: Verification...</h3>";

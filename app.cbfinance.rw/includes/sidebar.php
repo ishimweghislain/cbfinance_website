@@ -161,7 +161,7 @@ function canSeeReports($role) {
                 <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-white-50">
                     <span>Reports</span>
                 </h6>
-                <a class="nav-link <?php echo $current_page == 'reports' ? 'active' : ''; ?>" href="https://app.cbfinance.rw/modules/reports.php" target="_blank">
+                <a class="nav-link <?php echo $current_page == 'reports' ? 'active' : ''; ?>" href="?page=reports">
                     <i class="bi bi-file-earmark-bar-graph me-2"></i> Export Reports
                 </a>
             </li>

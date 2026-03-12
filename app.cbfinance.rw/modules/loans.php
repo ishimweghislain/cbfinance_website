@@ -168,77 +168,37 @@ if (!$loans) {
     $error_message = "Failed to fetch loans: " . $conn->error;
 }
 
-// **CALCULATE TOTAL OUTSTANDING (Principal) FROM loan_instalments TABLE**
-$total_outstanding_query = "SELECT SUM(GREATEST(0, principal_amount - principal_paid)) as total_outstanding FROM loan_instalments";
-$total_outstanding_result = $conn->query($total_outstanding_query);
+// **CALCULATE TOTAL OUTSTANDING & DUE FOR ALL LOANS**
+$totals_all_query = "SELECT SUM(principal_outstanding) as total_po, SUM(total_outstanding) as total_to FROM loan_portfolio";
+$totals_all_result = $conn->query($totals_all_query);
 $total_outstanding_all = 0;
-if ($total_outstanding_result && $row = $total_outstanding_result->fetch_assoc()) {
-    $total_outstanding_all = floatval($row['total_outstanding']);
-}
-
-// **CALCULATE TOTAL DUE (Principal + Interest) FROM loan_instalments TABLE**
-$total_due_query = "SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) as total_due 
-                    FROM loan_instalments";
-$total_due_result = $conn->query($total_due_query);
 $total_due_all = 0;
-if ($total_due_result && $row = $total_due_result->fetch_assoc()) {
-    $total_due_all = floatval($row['total_due']);
+if ($totals_all_result && $row = $totals_all_result->fetch_assoc()) {
+    $total_outstanding_all = floatval($row['total_po']);
+    $total_due_all = floatval($row['total_to']);
 }
 
-// Calculate outstanding and total due for filtered loans only
+// Calculate outstanding, total due, and disbursed for filtered loans only
 $filtered_outstanding = 0;
 $filtered_total_due = 0;
-$temp_loans = [];
-
-if ($loans && $loans->num_rows > 0) {
-    $temp_loans = $loans->fetch_all(MYSQLI_ASSOC);
-    foreach ($temp_loans as $loan) {
-        // Outstanding (principal only)
-        $loan_outstanding_query = "SELECT SUM(GREATEST(0, principal_amount - principal_paid)) as loan_outstanding 
-                                   FROM loan_instalments 
-                                   WHERE loan_id = ?";
-        $stmt_outstanding = $conn->prepare($loan_outstanding_query);
-        if ($stmt_outstanding) {
-            $stmt_outstanding->bind_param("i", $loan['loan_id']);
-            $stmt_outstanding->execute();
-            $stmt_outstanding->bind_result($loan_outstanding);
-            $stmt_outstanding->fetch();
-            $filtered_outstanding += floatval($loan_outstanding ?? 0);
-            $stmt_outstanding->close();
-        }
-
-        // Total due (principal + interest)
-        $loan_due_query = "SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) as loan_due 
-                           FROM loan_instalments 
-                           WHERE loan_id = ?";
-        $stmt_due = $conn->prepare($loan_due_query);
-        if ($stmt_due) {
-            $stmt_due->bind_param("i", $loan['loan_id']);
-            $stmt_due->execute();
-            $stmt_due->bind_result($loan_due);
-            $stmt_due->fetch();
-            $filtered_total_due += floatval($loan_due ?? 0);
-            $stmt_due->close();
-        }
-    }
-    mysqli_data_seek($loans, 0);
-}
-
-// Use filtered values if filter is active, otherwise use totals
-$total_outstanding = ($filter_status != 'all') ? $filtered_outstanding : $total_outstanding_all;
-$total_due        = ($filter_status != 'all') ? $filtered_total_due   : $total_due_all;
-
-$total_disbursed     = 0;
+$total_disbursed = 0;
 $filtered_loan_count = 0;
 
 if ($loans && $loans->num_rows > 0) {
     $loans_data = $loans->fetch_all(MYSQLI_ASSOC);
     foreach ($loans_data as $loan) {
-        $total_disbursed += $loan['total_disbursed'];
+        $filtered_outstanding += floatval($loan['principal_outstanding']);
+        $filtered_total_due   += floatval($loan['total_outstanding']);
+        $total_disbursed      += floatval($loan['total_disbursed']);
     }
-    $filtered_loan_count = $loans->num_rows;
-    mysqli_data_seek($loans, 0);
+    $filtered_loan_count = count($loans_data);
+    mysqli_data_seek($loans, 0); // reset pointer
 }
+
+// Use filtered values if filter is active, otherwise use totals
+$total_outstanding = ($filter_status != 'all') ? $filtered_outstanding : $total_outstanding_all;
+$total_due         = ($filter_status != 'all') ? $filtered_total_due   : $total_due_all;
+$total_disbursed   = ($filter_status != 'all') ? $total_disbursed      : $total_disbursed; // It already contains filtered or all based on query
 
 // Get total counts without filter for the statistics
 $total_query = "SELECT loan_status, COUNT(*) as count FROM loan_portfolio GROUP BY loan_status";

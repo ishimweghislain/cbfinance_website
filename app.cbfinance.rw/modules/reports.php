@@ -58,10 +58,10 @@ function buildPortfolioQuery($conn, $sd, $ed, $cf, $sf) {
     $wc = implode(' AND ', $w);
     return "SELECT lp.*, c.customer_name, c.customer_code, c.phone, c.email, c.address,
         (SELECT MAX(DATEDIFF(CURDATE(), due_date)) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) as max_days_overdue,
-        (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE()) as total_overdue_amount,
-        (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_principal_outstanding,
-        (SELECT IFNULL(SUM(GREATEST(0, interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_interest_outstanding,
-        (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_total_outstanding,
+        (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE() AND lp.loan_status IN ('Active', 'Performing', 'Overdue')) as total_overdue_amount,
+        (CASE WHEN lp.loan_status = 'Closed' THEN 0 ELSE (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) END) as live_principal_outstanding,
+        (CASE WHEN lp.loan_status = 'Closed' THEN 0 ELSE (SELECT IFNULL(SUM(GREATEST(0, interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) END) as live_interest_outstanding,
+        (CASE WHEN lp.loan_status = 'Closed' THEN 0 ELSE (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) END) as live_total_outstanding,
         (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_instalments,
         (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NOT NULL) as paid_instalments,
         (SELECT SUM(paid_amount) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_total_paid,
@@ -178,16 +178,16 @@ function buildSummaryQuery($conn, $sd, $ed) {
     return "SELECT
         COUNT(DISTINCT lp.loan_id) as total_loans, COUNT(DISTINCT lp.customer_id) as total_customers,
         SUM(lp.total_disbursed) as total_disbursed,
-        SUM((SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_outstanding,
-        SUM((SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_principal_outstanding,
-        SUM((SELECT IFNULL(SUM(GREATEST(0, interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_interest_outstanding,
+        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) ELSE 0 END) as total_outstanding,
+        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) ELSE 0 END) as total_principal_outstanding,
+        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN (SELECT IFNULL(SUM(GREATEST(0, interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) ELSE 0 END) as total_interest_outstanding,
         SUM((SELECT IFNULL(SUM(paid_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_paid,
         SUM(lp.total_principal_paid) as total_principal_paid,
         SUM(lp.total_interest_paid) as total_interest_paid,
         SUM(lp.total_management_fees_paid) as total_mgmt_fees_paid,
         (SELECT SUM(penalty_paid) FROM loan_instalments li JOIN loan_portfolio lp2 ON li.loan_id = lp2.loan_id WHERE lp2.disbursement_date BETWEEN '{$sd}' AND '{$ed}') as total_penalties_paid,
-        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing') THEN 1 ELSE 0 END) as active_loans,
-        SUM(CASE WHEN (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0 AND lp.loan_status IN ('Active', 'Performing') THEN 1 ELSE 0 END) as overdue_loans,
+        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 1 ELSE 0 END) as active_loans,
+        SUM(CASE WHEN (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0 AND lp.loan_status IN ('Active', 'Performing', 'Overdue') THEN 1 ELSE 0 END) as overdue_loans,
         SUM(CASE WHEN lp.loan_status='Suspended' THEN 1 ELSE 0 END) as suspended_loans,
         SUM(CASE WHEN lp.loan_status='Closed'    THEN 1 ELSE 0 END) as closed_loans,
         AVG(lp.interest_rate) as avg_interest_rate,
@@ -280,14 +280,23 @@ function formatRows($type, $data) {
     switch ($type) {
         case 'portfolio':
             $td = $to = $tp = $tpen = $po = $io = $tov = 0;
+            $act_count = 0; 
+            $act_to = $act_po = $act_io = $act_tov = 0;
+
             foreach ($data as $r) {
+                // Global Sums (For reconciliation)
                 $td   += $r['total_disbursed'];
-                $to   += $r['live_total_outstanding'];
                 $tp   += $r['live_total_paid'];
                 $tpen += $r['total_penalties_paid'];
-                $po   += $r['live_principal_outstanding'];
-                $io   += $r['live_interest_outstanding'];
-                $tov  += $r['total_overdue_amount'];
+                
+                // Active Sums (Specifically matching the Dashboard "Active Portfolio" card)
+                if (in_array($r['loan_status'], ['Active', 'Performing', 'Overdue', 'Written-off'])) {
+                    $act_count++;
+                    $act_to   += $r['live_total_outstanding'];
+                    $act_po   += $r['live_principal_outstanding'];
+                    $act_io   += $r['live_interest_outstanding'];
+                    $act_tov  += $r['total_overdue_amount'];
+                }
                 
                 $rows[] = [
                     $r['loan_number'], $r['customer_name'], $r['customer_code'], $r['phone'],
@@ -309,15 +318,26 @@ function formatRows($type, $data) {
                 ];
             }
             if (!empty($data)) {
+                // We add TWO rows of totals for complete clarity
+                $rows[] = array_fill(0, 19, ''); // Spacer
+                
                 $totals = array_fill(0, 19, '');
-                $totals[0] = 'TOTAL (' . count($data) . ' loans)';
-                $totals[5] = number_format($td, 2);
-                $totals[6] = number_format($tp, 2);
-                $totals[7] = number_format($tpen, 2);
-                $totals[8] = number_format($po, 2);
-                $totals[9] = number_format($io, 2);
-                $totals[10] = number_format($to, 2);
-                $totals[11] = number_format($tov, 2);
+                $totals[0] = "ACTIVE PORTFOLIO TOTAL ($act_count loans)";
+                $totals[5] = "---";
+                $totals[6] = "---";
+                $totals[7] = "---";
+                $totals[8] = number_format($act_po, 2);
+                $totals[9] = number_format($act_io, 2);
+                $totals[10] = number_format($act_to, 2);
+                $totals[11] = number_format($act_tov, 2);
+                $rows[] = $totals;
+
+                $g_totals = array_fill(0, 19, '');
+                $g_totals[0] = "GLOBAL RECONCILIATION (" . count($data) . " loans)";
+                $g_totals[5] = number_format($td, 2);
+                $g_totals[6] = number_format($tp, 2);
+                $g_totals[7] = number_format($tpen, 2);
+                $rows[] = $g_totals;
             }
             break;
 

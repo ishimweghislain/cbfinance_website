@@ -31,16 +31,22 @@ $classes_summary = null;
 try {
     // Get dashboard statistics
     
-    // 1. Total Active Portfolio - Current Live Math (Matches All-Time Report)
-    $result = $conn->query("SELECT 
-        COUNT(*) as total_loans, 
+    // 1. Total Portfolio Categorized (Matches Reports)
+    // ACTIVE + WRITTEN OFF (This is the "Outstanding" risk)
+    $active_res = $conn->query("SELECT 
+        COUNT(*) as count, 
         COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as principal_outstanding,
         COALESCE(SUM((SELECT SUM(GREATEST(0, interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as interest_outstanding,
         COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as total_outstanding 
-        FROM loan_portfolio lp WHERE lp.loan_status IN ('Active', 'Performing')");
-    if ($result) {
-        $stats['loans'] = $result->fetch_assoc();
-    }
+        FROM loan_portfolio lp WHERE lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off')");
+    $stats['loans'] = $active_res->fetch_assoc();
+
+    // GLOBAL (All 91 loans)
+    $global_res = $conn->query("SELECT 
+        COUNT(*) as total_loans, 
+        COALESCE(SUM(total_disbursed) , 0) as total_disbursed
+        FROM loan_portfolio");
+    $stats['global'] = $global_res->fetch_assoc();
     
     // 2. Total Active Customers
     $result = $conn->query("SELECT COUNT(*) as total_customers FROM customers WHERE is_active = 1");
@@ -269,20 +275,24 @@ try {
                                 Active Loans
                             </div>
                             <div class="h5 mb-0 fw-bold text-dark">
-                                <?php echo number_format($stats['loans']['total_loans'] ?? 0); ?>
+                                <?php echo number_format($stats['loans']['count'] ?? 0); ?>
+                            </div>
+                            <div class="text-xs text-muted mt-1">
+                                <i class="fas fa-history fa-fw me-1"></i>
+                                Total Distributed: <strong><?php echo number_format($stats['global']['total_disbursed'] ?? 0, 2); ?></strong>
                             </div>
                             <div class="text-xs text-muted mt-1">
                                 <i class="fas fa-money-bill-wave fa-fw me-1"></i>
-                                Principal: <strong><?php echo number_format($stats['loans']['principal_outstanding'] ?? 0, 2); ?></strong>
+                                Active Principal: <strong><?php echo number_format($stats['loans']['principal_outstanding'] ?? 0, 2); ?></strong>
                             </div>
                             <div class="text-xs text-muted mt-1">
                                 <i class="fas fa-plus-circle fa-fw me-1"></i>
-                                Total (P+I): <strong><?php echo number_format($stats['loans']['total_outstanding'] ?? 0, 2); ?></strong>
+                                Active Total (P+I): <strong><?php echo number_format($stats['loans']['total_outstanding'] ?? 0, 2); ?></strong>
                             </div>
                             <?php if(isset($stats['overdue']) && $stats['overdue']['overdue_loans'] > 0): ?>
                             <div class="small-stat text-danger mt-1">
                                 <i class="fas fa-exclamation-triangle fa-fw me-1"></i>
-                                <?php echo $stats['overdue']['overdue_loans']; ?> overdue <?php echo number_format($stats['overdue']['overdue_amount'], 2); ?>
+                                <?php echo $stats['overdue']['overdue_loans']; ?> overdue: <?php echo number_format($stats['overdue']['overdue_amount'], 2); ?>
                             </div>
                             <?php endif; ?>
                         </div>

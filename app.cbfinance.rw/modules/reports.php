@@ -58,10 +58,10 @@ function buildPortfolioQuery($conn, $sd, $ed, $cf, $sf) {
     $wc = implode(' AND ', $w);
     return "SELECT lp.*, c.customer_name, c.customer_code, c.phone, c.email, c.address,
         (SELECT MAX(DATEDIFF(CURDATE(), due_date)) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) as max_days_overdue,
-        (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE()) as total_overdue_amount,
+        (SELECT SUM(principal_amount - principal_paid + interest_amount - interest_paid) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE()) as total_overdue_amount,
         (SELECT SUM(principal_amount - principal_paid) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_principal_outstanding,
         (SELECT SUM(interest_amount - interest_paid) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_interest_outstanding,
-        (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_total_outstanding,
+        (SELECT SUM(principal_amount - principal_paid + interest_amount - interest_paid) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_total_outstanding,
         (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_instalments,
         (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NOT NULL) as paid_instalments,
         (SELECT SUM(paid_amount) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_total_paid,
@@ -178,7 +178,7 @@ function buildSummaryQuery($conn, $sd, $ed) {
     return "SELECT
         COUNT(DISTINCT lp.loan_id) as total_loans, COUNT(DISTINCT lp.customer_id) as total_customers,
         SUM(lp.total_disbursed) as total_disbursed, 
-        SUM((SELECT IFNULL(SUM(balance_remaining), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_outstanding,
+        SUM((SELECT IFNULL(SUM(principal_amount - principal_paid + interest_amount - interest_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_outstanding,
         SUM((SELECT IFNULL(SUM(principal_amount - principal_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_principal_outstanding,
         SUM((SELECT IFNULL(SUM(interest_amount - interest_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_interest_outstanding,
         SUM((SELECT IFNULL(SUM(paid_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_paid,

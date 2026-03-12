@@ -36,7 +36,7 @@ try {
         COUNT(*) as total_loans, 
         COALESCE(SUM(principal_outstanding), 0) as principal_outstanding,
         COALESCE(SUM(interest_outstanding), 0) as interest_outstanding,
-        COALESCE(SUM(total_outstanding), 0) as total_outstanding 
+        COALESCE(SUM((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = loan_portfolio.loan_id)), 0) as total_outstanding 
         FROM loan_portfolio WHERE loan_status IN ('Active', 'Performing')");
     if ($result) {
         $stats['loans'] = $result->fetch_assoc();
@@ -132,10 +132,10 @@ try {
     // 13. Overdue Loans
     $result = $conn->query("SELECT 
         COUNT(*) as overdue_loans, 
-        COALESCE(SUM(total_outstanding), 0) as overdue_amount 
-        FROM loan_portfolio 
-        WHERE (days_overdue > 0 OR (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = loan_portfolio.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0)
-        AND loan_status IN ('Active', 'Performing', 'Overdue')");
+        COALESCE(SUM((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())), 0) as overdue_amount 
+        FROM loan_portfolio lp
+        WHERE (lp.days_overdue > 0 OR (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0)
+        AND lp.loan_status IN ('Active', 'Performing', 'Overdue')");
     if ($result) {
         $stats['overdue'] = $result->fetch_assoc();
     }

@@ -367,7 +367,7 @@ function syncLoanPortfolio($conn, $loan_id) {
         days_overdue = GREATEST(0, DATEDIFF(CURDATE(), due_date)) 
         WHERE loan_id = $loan_id AND payment_date IS NULL");
 
-    // 1. First, recalibrate the total_principal_paid and total_interest_paid based on instalments
+    // 1. Recalibrate summary paid columns
     $conn->query("UPDATE loan_portfolio lp SET 
         lp.total_principal_paid = (SELECT IFNULL(SUM(principal_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id),
         lp.total_interest_paid  = (SELECT IFNULL(SUM(interest_paid), 0)  FROM loan_instalments WHERE loan_id = lp.loan_id),
@@ -376,11 +376,11 @@ function syncLoanPortfolio($conn, $loan_id) {
         lp.days_overdue = (SELECT IFNULL(MAX(days_overdue), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL)
         WHERE lp.loan_id = $loan_id");
 
-    // 2. Now update outstanding balances: 
+    // 2. Update outstanding balances using live math
     $sync_q = "UPDATE loan_portfolio lp SET 
-               lp.principal_outstanding = GREATEST(0, lp.total_disbursed - lp.total_principal_paid),
-               lp.interest_outstanding  = GREATEST(0, (SELECT IFNULL(SUM(interest_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) - lp.total_interest_paid),
-               lp.total_outstanding     = lp.principal_outstanding + lp.interest_outstanding,
+               lp.principal_outstanding = GREATEST(0, (SELECT IFNULL(SUM(principal_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) - lp.total_principal_paid),
+               lp.interest_outstanding  = GREATEST(0, (SELECT IFNULL(SUM(interest_amount), 0)  FROM loan_instalments WHERE loan_id = lp.loan_id) - lp.total_interest_paid),
+               lp.total_outstanding     = (SELECT IFNULL(SUM(balance_remaining), 0)        FROM loan_instalments WHERE loan_id = lp.loan_id),
                lp.updated_at            = NOW()
                WHERE lp.loan_id = ?";
     $sync_st = $conn->prepare($sync_q);

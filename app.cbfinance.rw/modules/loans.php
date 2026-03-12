@@ -168,8 +168,8 @@ if (!$loans) {
     $error_message = "Failed to fetch loans: " . $conn->error;
 }
 
-// **CALCULATE TOTAL OUTSTANDING FROM loan_instalments TABLE**
-$total_outstanding_query = "SELECT SUM(COALESCE(principal_amount, 0)) as total_outstanding FROM loan_instalments WHERE payment_date IS NULL";
+// **CALCULATE TOTAL OUTSTANDING (Principal) FROM loan_instalments TABLE**
+$total_outstanding_query = "SELECT SUM(GREATEST(0, principal_amount - principal_paid)) as total_outstanding FROM loan_instalments";
 $total_outstanding_result = $conn->query($total_outstanding_query);
 $total_outstanding_all = 0;
 if ($total_outstanding_result && $row = $total_outstanding_result->fetch_assoc()) {
@@ -177,9 +177,8 @@ if ($total_outstanding_result && $row = $total_outstanding_result->fetch_assoc()
 }
 
 // **CALCULATE TOTAL DUE (Principal + Interest) FROM loan_instalments TABLE**
-$total_due_query = "SELECT SUM(COALESCE(principal_amount, 0) + COALESCE(interest_amount, 0)) as total_due 
-                    FROM loan_instalments 
-                    WHERE payment_date IS NULL";
+$total_due_query = "SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) as total_due 
+                    FROM loan_instalments";
 $total_due_result = $conn->query($total_due_query);
 $total_due_all = 0;
 if ($total_due_result && $row = $total_due_result->fetch_assoc()) {
@@ -195,9 +194,9 @@ if ($loans && $loans->num_rows > 0) {
     $temp_loans = $loans->fetch_all(MYSQLI_ASSOC);
     foreach ($temp_loans as $loan) {
         // Outstanding (principal only)
-        $loan_outstanding_query = "SELECT SUM(COALESCE(principal_amount, 0)) as loan_outstanding 
+        $loan_outstanding_query = "SELECT SUM(GREATEST(0, principal_amount - principal_paid)) as loan_outstanding 
                                    FROM loan_instalments 
-                                   WHERE loan_id = ? AND payment_date IS NULL";
+                                   WHERE loan_id = ?";
         $stmt_outstanding = $conn->prepare($loan_outstanding_query);
         if ($stmt_outstanding) {
             $stmt_outstanding->bind_param("i", $loan['loan_id']);
@@ -209,9 +208,9 @@ if ($loans && $loans->num_rows > 0) {
         }
 
         // Total due (principal + interest)
-        $loan_due_query = "SELECT SUM(COALESCE(principal_amount, 0) + COALESCE(interest_amount, 0)) as loan_due 
+        $loan_due_query = "SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) as loan_due 
                            FROM loan_instalments 
-                           WHERE loan_id = ? AND payment_date IS NULL";
+                           WHERE loan_id = ?";
         $stmt_due = $conn->prepare($loan_due_query);
         if ($stmt_due) {
             $stmt_due->bind_param("i", $loan['loan_id']);

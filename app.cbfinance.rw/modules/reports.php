@@ -178,16 +178,23 @@ function buildSummaryQuery($conn, $sd, $ed) {
     return "SELECT
         COUNT(DISTINCT lp.loan_id) as total_loans, COUNT(DISTINCT lp.customer_id) as total_customers,
         SUM(lp.total_disbursed) as total_disbursed,
+        
+        -- GLOBAL RECONCILIATION FIELDS (Matches Loans Page Header)
+        SUM((SELECT IFNULL(SUM(principal_amount - principal_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL)) as global_principal_residue,
+        SUM((SELECT IFNULL(SUM(principal_amount - principal_paid + interest_amount - interest_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL)) as global_total_residue,
+        
+        -- ACTIVE PORTFOLIO FIELDS (Matches Dashboard Cards)
         SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) ELSE 0 END) as total_outstanding,
         SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) ELSE 0 END) as total_principal_outstanding,
         SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN (SELECT IFNULL(SUM(GREATEST(0, interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) ELSE 0 END) as total_interest_outstanding,
+        
         SUM((SELECT IFNULL(SUM(paid_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_paid,
         SUM(lp.total_principal_paid) as total_principal_paid,
         SUM(lp.total_interest_paid) as total_interest_paid,
         SUM(lp.total_management_fees_paid) as total_mgmt_fees_paid,
         (SELECT SUM(penalty_paid) FROM loan_instalments li JOIN loan_portfolio lp2 ON li.loan_id = lp2.loan_id WHERE lp2.disbursement_date BETWEEN '{$sd}' AND '{$ed}') as total_penalties_paid,
-        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 1 ELSE 0 END) as active_loans,
-        SUM(CASE WHEN (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0 AND lp.loan_status IN ('Active', 'Performing', 'Overdue') THEN 1 ELSE 0 END) as overdue_loans,
+        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 1 ELSE 0 END) as active_loans_count,
+        SUM(CASE WHEN (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0 AND lp.loan_status IN ('Active', 'Performing', 'Overdue') THEN 1 ELSE 0 END) as overdue_loans_count,
         SUM(CASE WHEN lp.loan_status='Suspended' THEN 1 ELSE 0 END) as suspended_loans,
         SUM(CASE WHEN lp.loan_status='Closed'    THEN 1 ELSE 0 END) as closed_loans,
         AVG(lp.interest_rate) as avg_interest_rate,
@@ -279,16 +286,22 @@ function formatRows($type, $data) {
 
     switch ($type) {
         case 'portfolio':
-            $td = $to = $tp = $tpen = $po = $io = $tov = 0;
+            $td = $tp = $tpen = 0;
             $act_count = 0; 
             $act_to = $act_po = $act_io = $act_tov = 0;
+            $glob_residue_po = $glob_residue_to = 0;
 
             foreach ($data as $r) {
-                // Global Sums (For reconciliation)
+                // Global Reconciliation Sums (Matches Loans Page Header)
                 $td   += $r['total_disbursed'];
                 $tp   += $r['live_total_paid'];
                 $tpen += $r['total_penalties_paid'];
                 
+                // Logic for the 150M/166M "Residue" (Anything not fully swiped/closed)
+                // We use the 'payment_date IS NULL' logic to match the current Loans/Dashboard legacy cards
+                $glob_residue_po += $r['live_principal_outstanding'];
+                $glob_residue_to += $r['live_total_outstanding'];
+
                 // Active Sums (Specifically matching the Dashboard "Active Portfolio" card)
                 if (in_array($r['loan_status'], ['Active', 'Performing', 'Overdue', 'Written-off'])) {
                     $act_count++;
@@ -318,26 +331,32 @@ function formatRows($type, $data) {
                 ];
             }
             if (!empty($data)) {
-                // We add TWO rows of totals for complete clarity
                 $rows[] = array_fill(0, 19, ''); // Spacer
                 
+                // Active Portfolio Total (Matches Dashboard)
                 $totals = array_fill(0, 19, '');
                 $totals[0] = "ACTIVE PORTFOLIO TOTAL ($act_count loans)";
-                $totals[5] = "---";
-                $totals[6] = "---";
-                $totals[7] = "---";
                 $totals[8] = number_format($act_po, 2);
                 $totals[9] = number_format($act_io, 2);
                 $totals[10] = number_format($act_to, 2);
                 $totals[11] = number_format($act_tov, 2);
                 $rows[] = $totals;
 
-                $g_totals = array_fill(0, 19, '');
-                $g_totals[0] = "GLOBAL RECONCILIATION (" . count($data) . " loans)";
-                $g_totals[5] = number_format($td, 2);
-                $g_totals[6] = number_format($tp, 2);
-                $g_totals[7] = number_format($tpen, 2);
-                $rows[] = $g_totals;
+                // Global Reconciliation (Total Disbursed, Total Collected)
+                $g_reconcile = array_fill(0, 19, '');
+                $g_reconcile[0] = "GLOBAL RECONCILIATION (" . count($data) . " loans)";
+                $g_reconcile[5] = number_format($td, 2);
+                $g_reconcile[6] = number_format($tp, 2);
+                $g_reconcile[7] = number_format($tpen, 2);
+                $rows[] = $g_reconcile;
+
+                // Global Residue (Matches Loans Page Header: Principal Only / P+I Remaining)
+                $g_residue = array_fill(0, 19, '');
+                $g_residue[0] = "GLOBAL RESIDUE (Principal only: " . number_format($glob_residue_po, 2) . ")";
+                $g_residue[8] = number_format($glob_residue_po, 2);
+                $g_residue[10] = number_format($glob_residue_to, 2);
+                $g_residue[12] = " (P+I remaining: " . number_format($glob_residue_to, 2) . ")";
+                $rows[] = $g_residue;
             }
             break;
 
@@ -448,24 +467,26 @@ function formatRows($type, $data) {
                 $r  = $data[0];
                 $cr = $r['total_disbursed'] > 0 ? ($r['total_paid'] / $r['total_disbursed']) * 100 : 0;
                 $rows = [
-                    ['── PORTFOLIO SUMMARY ──────────────────', ''],
+                    ['── GLOBAL RECONCILIATION ──────────────', ''],
                     ['Total Loans',            number_format($r['total_loans'])],
                     ['Total Customers',        number_format($r['total_customers'])],
                     ['Total Disbursed',        number_format($r['total_disbursed'], 2)],
-                    ['Total Principal Outstanding', number_format($r['total_principal_outstanding'], 2)],
-                    ['Total Interest Outstanding',  number_format($r['total_interest_outstanding'], 2)],
-                    ['Total Outstanding (P+I)',     number_format($r['total_outstanding'], 2)],
+                    ['Principal only (Global Residue)', number_format($r['global_principal_residue'], 2)],
+                    ['Principal + Interest remaining (Global Residue)', number_format($r['global_total_residue'], 2)],
+                    ['', ''],
+                    ['── ACTIVE PORTFOLIO ONLY ──────────────', ''],
+                    ['Active Loans count',     number_format($r['active_loans_count'])],
+                    ['Principal Outstanding',  number_format($r['total_principal_outstanding'], 2)],
+                    ['Interest Outstanding',   number_format($r['total_interest_outstanding'], 2)],
+                    ['Total Outstanding (P+I)', number_format($r['total_outstanding'], 2)],
+                    ['Overdue Loans count',    number_format($r['overdue_loans_count'])],
+                    ['', ''],
+                    ['── RECORDED PAYMENTS ──────────────────', ''],
                     ['Total Collected (Inc Pen)',   number_format($r['total_paid'], 2)],
                     ['Total Principal Paid',   number_format($r['total_principal_paid'], 2)],
                     ['Total Interest Paid',    number_format($r['total_interest_paid'], 2)],
                     ['Total Mgmt Fees Paid',   number_format($r['total_mgmt_fees_paid'], 2)],
                     ['Total Penalties Paid',   number_format($r['total_penalties_paid'], 2)],
-                    ['', ''],
-                    ['── LOAN STATUS BREAKDOWN ──────────────', ''],
-                    ['Active Loans',           number_format($r['active_loans'])],
-                    ['Overdue Loans',          number_format($r['overdue_loans'])],
-                    ['Suspended Loans',        number_format($r['suspended_loans'])],
-                    ['Closed Loans',           number_format($r['closed_loans'])],
                     ['', ''],
                     ['── OTHER METRICS ──────────────────────', ''],
                     ['Average Interest Rate',  number_format($r['avg_interest_rate'], 2) . '%'],

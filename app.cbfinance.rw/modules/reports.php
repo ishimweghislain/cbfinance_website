@@ -57,11 +57,14 @@ function buildPortfolioQuery($conn, $sd, $ed, $cf, $sf) {
     }
     $wc = implode(' AND ', $w);
     return "SELECT lp.*, c.customer_name, c.customer_code, c.phone, c.email, c.address,
-        (SELECT MAX(days_overdue) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND days_overdue > 0) as max_days_overdue,
-        (CASE WHEN (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0 THEN lp.total_outstanding ELSE 0 END) as total_overdue_amount,
+        (SELECT MAX(DATEDIFF(CURDATE(), due_date)) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) as max_days_overdue,
+        (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE()) as total_overdue_amount,
+        (SELECT SUM(principal_amount - principal_paid) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_principal_outstanding,
+        (SELECT SUM(interest_amount - interest_paid) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_interest_outstanding,
+        (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_total_outstanding,
         (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_instalments,
         (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NOT NULL) as paid_instalments,
-        (SELECT SUM(paid_amount) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_collected,
+        (SELECT SUM(paid_amount) FROM loan_instalments WHERE loan_id = lp.loan_id) as live_total_paid,
         (SELECT SUM(penalty_paid) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_penalties_paid
         FROM loan_portfolio lp LEFT JOIN customers c ON lp.customer_id = c.customer_id
         WHERE {$wc} ORDER BY lp.created_at DESC";
@@ -106,16 +109,17 @@ function buildOverdueQuery($conn, $sd, $ed, $cf) {
     $wc = implode(' AND ', $w);
     return "SELECT li.*, lp.loan_number, lp.interest_rate, lp.loan_status, lp.collateral_net_value,
         c.customer_name, c.customer_code, c.phone,
+        DATEDIFF(CURDATE(), li.due_date) as live_days_overdue,
         CASE
-            WHEN li.days_overdue BETWEEN 1   AND 89  THEN '1-89 Days (1%)'
-            WHEN li.days_overdue BETWEEN 90  AND 179 THEN '90-179 Days (20%)'
-            WHEN li.days_overdue BETWEEN 180 AND 359 THEN '180-359 Days (50%)'
-            WHEN li.days_overdue >= 360              THEN '360+ Days (100%)'
+            WHEN DATEDIFF(CURDATE(), li.due_date) BETWEEN 1   AND 89  THEN '1-89 Days (1%)'
+            WHEN DATEDIFF(CURDATE(), li.due_date) BETWEEN 90  AND 179 THEN '90-179 Days (20%)'
+            WHEN DATEDIFF(CURDATE(), li.due_date) BETWEEN 180 AND 359 THEN '180-359 Days (50%)'
+            WHEN DATEDIFF(CURDATE(), li.due_date) >= 360              THEN '360+ Days (100%)'
         END as provision_category
         FROM loan_instalments li
         LEFT JOIN loan_portfolio lp ON li.loan_id = lp.loan_id
         LEFT JOIN customers c ON lp.customer_id = c.customer_id
-        WHERE {$wc} ORDER BY li.days_overdue DESC, li.due_date";
+        WHERE {$wc} ORDER BY live_days_overdue DESC, li.due_date";
 }
 
 function buildPaymentsQuery($conn, $sd, $ed, $cf) {
@@ -140,19 +144,20 @@ function buildProvisionsQuery($conn, $sd, $ed, $cf) {
     if ($cf) $w[] = "lp.customer_id = " . intval($cf);
     $wc = implode(' AND ', $w);
     return "SELECT lp.loan_id, lp.loan_number, c.customer_name, c.customer_code,
-        lp.total_outstanding, COALESCE(lp.collateral_net_value,0) as collateral_net_value,
-        (lp.total_outstanding - COALESCE(lp.collateral_net_value,0)) as exposure,
-        MAX(li.days_overdue) as max_days_overdue,
+        (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id) as total_outstanding,
+        COALESCE(lp.collateral_net_value,0) as collateral_net_value,
+        ((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id) - COALESCE(lp.collateral_net_value,0)) as exposure,
+        MAX(DATEDIFF(CURDATE(), li.due_date)) as max_days_overdue,
         CASE
-            WHEN MAX(li.days_overdue) >= 360 THEN (lp.total_outstanding - COALESCE(lp.collateral_net_value,0)) * 1.00
-            WHEN MAX(li.days_overdue) >= 180 THEN (lp.total_outstanding - COALESCE(lp.collateral_net_value,0)) * 0.50
-            WHEN MAX(li.days_overdue) >= 90  THEN (lp.total_outstanding - COALESCE(lp.collateral_net_value,0)) * 0.20
-            ELSE                                  (lp.total_outstanding - COALESCE(lp.collateral_net_value,0)) * 0.01
+            WHEN MAX(DATEDIFF(CURDATE(), li.due_date)) >= 360 THEN ((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id) - COALESCE(lp.collateral_net_value,0)) * 1.00
+            WHEN MAX(DATEDIFF(CURDATE(), li.due_date)) >= 180 THEN ((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id) - COALESCE(lp.collateral_net_value,0)) * 0.50
+            WHEN MAX(DATEDIFF(CURDATE(), li.due_date)) >= 90  THEN ((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id) - COALESCE(lp.collateral_net_value,0)) * 0.20
+            ELSE                                  ((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id) - COALESCE(lp.collateral_net_value,0)) * 0.01
         END as provision_amount,
         CASE
-            WHEN MAX(li.days_overdue) >= 360 THEN '100%'
-            WHEN MAX(li.days_overdue) >= 180 THEN '50%'
-            WHEN MAX(li.days_overdue) >= 90  THEN '20%'
+            WHEN MAX(DATEDIFF(CURDATE(), li.due_date)) >= 360 THEN '100%'
+            WHEN MAX(DATEDIFF(CURDATE(), li.due_date)) >= 180 THEN '50%'
+            WHEN MAX(DATEDIFF(CURDATE(), li.due_date)) >= 90  THEN '20%'
             ELSE '1%'
         END as provision_rate,
         lp.last_provision_date, lp.loan_status
@@ -172,10 +177,12 @@ function buildSummaryQuery($conn, $sd, $ed) {
 
     return "SELECT
         COUNT(DISTINCT lp.loan_id) as total_loans, COUNT(DISTINCT lp.customer_id) as total_customers,
-        SUM(lp.total_disbursed) as total_disbursed, SUM(lp.total_outstanding) as total_outstanding,
-        SUM(lp.principal_outstanding) as total_principal_outstanding,
-        SUM(lp.interest_outstanding) as total_interest_outstanding,
-        SUM(lp.total_paid) as total_paid, SUM(lp.total_principal_paid) as total_principal_paid,
+        SUM(lp.total_disbursed) as total_disbursed, 
+        SUM((SELECT IFNULL(SUM(balance_remaining), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_outstanding,
+        SUM((SELECT IFNULL(SUM(principal_amount - principal_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_principal_outstanding,
+        SUM((SELECT IFNULL(SUM(interest_amount - interest_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_interest_outstanding,
+        SUM((SELECT IFNULL(SUM(paid_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_paid,
+        SUM(lp.total_principal_paid) as total_principal_paid,
         SUM(lp.total_interest_paid) as total_interest_paid,
         SUM(lp.total_management_fees_paid) as total_mgmt_fees_paid,
         (SELECT SUM(penalty_paid) FROM loan_instalments li JOIN loan_portfolio lp2 ON li.loan_id = lp2.loan_id WHERE lp2.disbursement_date BETWEEN '{$sd}' AND '{$ed}') as total_penalties_paid,
@@ -275,22 +282,22 @@ function formatRows($type, $data) {
             $td = $to = $tp = $tpen = $po = $io = $tov = 0;
             foreach ($data as $r) {
                 $td   += $r['total_disbursed'];
-                $to   += $r['total_outstanding'];
-                $tp   += $r['total_paid'];
+                $to   += $r['live_total_outstanding'];
+                $tp   += $r['live_total_paid'];
                 $tpen += $r['total_penalties_paid'];
-                $po   += $r['principal_outstanding'];
-                $io   += $r['interest_outstanding'];
+                $po   += $r['live_principal_outstanding'];
+                $io   += $r['live_interest_outstanding'];
                 $tov  += $r['total_overdue_amount'];
                 
                 $rows[] = [
                     $r['loan_number'], $r['customer_name'], $r['customer_code'], $r['phone'],
                     number_format($r['loan_amount'] ?? 0, 2),
                     number_format($r['total_disbursed'], 2),
-                    number_format($r['total_paid'], 2),
+                    number_format($r['live_total_paid'], 2),
                     number_format($r['total_penalties_paid'] ?? 0, 2),
-                    number_format($r['principal_outstanding'], 2),
-                    number_format($r['interest_outstanding'], 2),
-                    number_format($r['total_outstanding'], 2),
+                    number_format($r['live_principal_outstanding'], 2),
+                    number_format($r['live_interest_outstanding'], 2),
+                    number_format($r['live_total_outstanding'], 2),
                     number_format($r['total_overdue_amount'] ?? 0, 2),
                     $r['interest_rate'] . '%',
                     $r['number_of_instalments'] ?? '',

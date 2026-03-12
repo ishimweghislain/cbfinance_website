@@ -64,9 +64,7 @@ if ($closed_loans && $closed_loans->num_rows > 0) {
         $ok = $conn->query("UPDATE loan_portfolio 
             SET principal_outstanding = 0,
                 interest_outstanding  = 0,
-                total_outstanding     = 0,
-                overdue_amount        = 0,
-                days_overdue          = 0
+                total_outstanding     = 0
             WHERE loan_id = $cid");
         if ($ok) {
             $closed_count++;

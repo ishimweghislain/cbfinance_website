@@ -31,13 +31,13 @@ $classes_summary = null;
 try {
     // Get dashboard statistics
     
-    // 1. Total Active Loans
+    // 1. Total Active Portfolio - Current Live Math (Matches All-Time Report)
     $result = $conn->query("SELECT 
         COUNT(*) as total_loans, 
-        COALESCE(SUM(principal_outstanding), 0) as principal_outstanding,
-        COALESCE(SUM(interest_outstanding), 0) as interest_outstanding,
-        COALESCE(SUM((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = loan_portfolio.loan_id)), 0) as total_outstanding 
-        FROM loan_portfolio WHERE loan_status IN ('Active', 'Performing')");
+        COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as principal_outstanding,
+        COALESCE(SUM((SELECT SUM(GREATEST(0, interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as interest_outstanding,
+        COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as total_outstanding 
+        FROM loan_portfolio lp WHERE lp.loan_status IN ('Active', 'Performing')");
     if ($result) {
         $stats['loans'] = $result->fetch_assoc();
     }
@@ -129,10 +129,10 @@ try {
     $total_liabilities = $stats['liabilities']['total_liabilities'] ?? 0;
     $stats['equity']['total_equity'] = $total_assets - $total_liabilities;
     
-    // 13. Overdue Loans
+    // 13. Overdue Loans - Live P+I Math
     $result = $conn->query("SELECT 
         COUNT(*) as overdue_loans, 
-        COALESCE(SUM((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())), 0) as overdue_amount 
+        COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())), 0) as overdue_amount 
         FROM loan_portfolio lp
         WHERE (lp.days_overdue > 0 OR (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0)
         AND lp.loan_status IN ('Active', 'Performing', 'Overdue')");

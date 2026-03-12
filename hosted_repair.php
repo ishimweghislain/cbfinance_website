@@ -29,13 +29,19 @@ while ($loan = $res->fetch_assoc()) {
     $id = $loan['loan_id'];
     $num = $loan['loan_number'];
     
-    // Call the updated sync function which now handles days_overdue and negatives
+    // 1. Sync the primary counters using the function
     syncLoanPortfolio($conn, $id);
     
+    // 2. Explicitly force P+I math on summary columns to be 100% sure
+    $conn->query("UPDATE loan_portfolio SET 
+        principal_outstanding = GREATEST(0, (SELECT IFNULL(SUM(principal_amount - principal_paid), 0) FROM loan_instalments WHERE loan_id = $id)),
+        interest_outstanding  = GREATEST(0, (SELECT IFNULL(SUM(interest_amount - interest_paid), 0) FROM loan_instalments WHERE loan_id = $id)),
+        total_outstanding     = GREATEST(0, (SELECT IFNULL(SUM(principal_amount - principal_paid + interest_amount - interest_paid), 0) FROM loan_instalments WHERE loan_id = $id))
+        WHERE loan_id = $id");
+
     $count++;
     if ($count % 5 == 0) {
-        echo "<li>Processed $count loans (Last: $num)...</li>";
-        // Flush output to browser to avoid timeout
+        echo "<li>Processed $count loans (Final loan in DB: $num)...</li>";
         if (ob_get_level() > 0) ob_flush();
         flush();
     }
@@ -44,7 +50,8 @@ while ($loan = $res->fetch_assoc()) {
 echo "</ul>";
 echo "<div style='color: green; font-weight: bold; border: 2px solid green; padding: 15px; margin-top: 20px;'>";
 echo "✅ SUCCESS: $count loans have been repaired and synchronized.";
-echo "<br>Excel Reports and Dashboard will now match perfectly.";
+echo "<br>The math formula is now strictly: TOTAL = Principal + Interest.";
+echo "<br>The dashboard and reports will now match perfectly.";
 echo "</div>";
 
 echo "<p><a href='index.php'>Go to Dashboard</a></p>";

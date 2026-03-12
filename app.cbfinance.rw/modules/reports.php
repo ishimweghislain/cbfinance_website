@@ -757,6 +757,9 @@ function downloadCsv() {
     if (!validateDates()) return;
     
     const form = document.getElementById('reportForm');
+    const originalTarget = form.target;
+    
+    // Create a hidden input for the export format
     let existing = form.querySelector('input[name="export_format"]');
     if (existing) existing.remove();
 
@@ -765,15 +768,35 @@ function downloadCsv() {
     inp.name  = 'export_format';
     inp.value = 'csv';
     form.appendChild(inp);
+    
+    // Use target _blank to initiate download in background/new tab
+    // so the current page (with its sidebar) stays put
+    form.target = '_blank';
     form.submit();
+    
+    // Restore original target immediately so future normal filters stay in-page
+    setTimeout(() => {
+        form.target = originalTarget;
+        if (inp.parentNode) inp.parentNode.removeChild(inp);
+    }, 500);
 }
 
 
 
 function selectReport(type) {
-    document.getElementById('reportTypeSelect').value = type;
+    const select = document.getElementById('reportTypeSelect');
+    if (!select) return;
+    
+    select.value = type;
+    
+    // Highlight UI cards
     document.querySelectorAll('.report-card').forEach(c => c.classList.remove('active-report'));
-    event.currentTarget.classList.add('active-report');
+    if (event && event.currentTarget) {
+        event.currentTarget.classList.add('active-report');
+    }
+    
+    // Trigger preview update
+    validateAndTrigger();
 }
 
 function setRange(range) {

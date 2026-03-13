@@ -360,12 +360,26 @@ function recalculateRemainingSchedule($conn, $loan_id, $current_instalment_numbe
 
 /**
  * Synchronizes the loan_portfolio summary columns with the latest installment schedule data.
+ * Also repairs continuity (Opening = Previous Closing) for pending installments.
  */
 function syncLoanPortfolio($conn, $loan_id) {
     // 0. Update days_overdue for installments
     $conn->query("UPDATE loan_instalments SET 
         days_overdue = GREATEST(0, DATEDIFF(CURDATE(), due_date)) 
         WHERE loan_id = $loan_id AND payment_date IS NULL");
+
+    // 0b. REPAIR CONTINUITY: Ensure each pending installment opens with the previous one's closing balance
+    $inst_res = $conn->query("SELECT * FROM loan_instalments WHERE loan_id = $loan_id ORDER BY instalment_number ASC");
+    $prev_closing = null;
+    while ($inst = $inst_res->fetch_assoc()) {
+        if ($prev_closing !== null && $inst['status'] !== 'Fully Paid') {
+             if (abs(floatval($inst['opening_balance']) - $prev_closing) > 0.01) {
+                 $curr_id = $inst['instalment_id'];
+                 $conn->query("UPDATE loan_instalments SET opening_balance = $prev_closing WHERE instalment_id = $curr_id");
+             }
+        }
+        $prev_closing = floatval($inst['closing_balance']);
+    }
 
     // 1. Recalibrate summary paid columns
     $conn->query("UPDATE loan_portfolio lp SET 
@@ -376,7 +390,8 @@ function syncLoanPortfolio($conn, $loan_id) {
         lp.days_overdue = (SELECT IFNULL(MAX(days_overdue), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL)
         WHERE lp.loan_id = $loan_id");
 
-    // 2. Update outstanding balances using live math
+    // 2. Update outstanding balances
+    // total_outstanding should be the SUM of balance_remaining from all installments
     $sync_q = "UPDATE loan_portfolio lp SET 
                lp.principal_outstanding = GREATEST(0, (SELECT IFNULL(SUM(principal_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) - lp.total_principal_paid),
                lp.interest_outstanding  = GREATEST(0, (SELECT IFNULL(SUM(interest_amount), 0)  FROM loan_instalments WHERE loan_id = lp.loan_id) - lp.total_interest_paid),

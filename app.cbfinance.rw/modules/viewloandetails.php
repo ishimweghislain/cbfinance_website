@@ -613,6 +613,7 @@ body { font-size: 12px !important; background: #f4f6fb; }
                         <th class="text-end">Penalty</th>
                         <th>Method</th>
                         <th>Reference</th>
+                        <th class="text-center">Evidence</th>
                         <th class="text-center no-print">Delete</th>
                     </tr>
                 </thead>
@@ -628,6 +629,16 @@ body { font-size: 12px !important; background: #f4f6fb; }
                     <td class="text-end text-danger"><?php echo number_format($p['penalties'] ?? 0, 0); ?></td>
                     <td><?php echo !empty($p['payment_method']) ? '<span class="badge bg-info text-dark">'.htmlspecialchars($p['payment_method']).'</span>' : '—'; ?></td>
                     <td><?php echo !empty($p['reference_number']) ? '<code>'.htmlspecialchars($p['reference_number']).'</code>' : '—'; ?></td>
+                    <td class="text-center">
+                        <?php if (!empty($p['payment_evidence'])): ?>
+                            <a href="uploads/payments/<?php echo $p['payment_evidence']; ?>" target="_blank">
+                                <img src="uploads/payments/<?php echo $p['payment_evidence']; ?>" 
+                                     alt="Evidence" style="height:35px;width:35px;object-fit:cover;border-radius:4px;border:1px solid #ddd;">
+                            </a>
+                        <?php else: ?>
+                            <span class="text-muted small">No photo</span>
+                        <?php endif; ?>
+                    </td>
                     <td class="text-center no-print">
                         <?php $del_amt = number_format($p['payment_amount'] ?? 0, 0); $del_pid = intval($p['payment_id'] ?? 0); ?>
                         <button class="btn btn-outline-danger btn-sm px-2 py-0"
@@ -647,7 +658,7 @@ body { font-size: 12px !important; background: #f4f6fb; }
                         <td class="text-end"><?php echo number_format(array_sum(array_column($payments, 'interest_amount')), 0); ?></td>
                         <td class="text-end"><?php echo number_format(array_sum(array_column($payments, 'monitoring_fee')), 0); ?></td>
                         <td class="text-end text-danger"><?php echo number_format(array_sum(array_column($payments, 'penalties')), 0); ?></td>
-                        <td colspan="3"></td>
+                        <td colspan="4"></td>
                     </tr>
                 </tfoot>
             </table>

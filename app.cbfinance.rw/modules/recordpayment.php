@@ -183,6 +183,25 @@ try {
     // Handle payment processing
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
+        // --- FILE UPLOAD HANDLER ---
+        $evidence_filename = null;
+        if (isset($_FILES['payment_evidence']) && $_FILES['payment_evidence']['error'] === UPLOAD_ERR_OK) {
+            $upload_dir = __DIR__ . '/../uploads/payments/';
+            if (!is_dir($upload_dir)) {
+                mkdir($upload_dir, 0755, true);
+            }
+            
+            $file_ext = strtolower(pathinfo($_FILES['payment_evidence']['name'], PATHINFO_EXTENSION));
+            $allowed_exts = ['jpg', 'jpeg', 'png', 'gif'];
+            
+            if (in_array($file_ext, $allowed_exts)) {
+                $new_filename = 'pmt_' . time() . '_' . uniqid() . '.' . $file_ext;
+                if (move_uploaded_file($_FILES['payment_evidence']['tmp_name'], $upload_dir . $new_filename)) {
+                    $evidence_filename = $new_filename;
+                }
+            }
+        }
+
         if ($_POST['action'] === 'update_days_overdue') {
             $instalment_id = intval($_POST['instalment_id'] ?? 0);
             $days_overdue = intval($_POST['days_overdue'] ?? 0);
@@ -368,12 +387,13 @@ try {
                                         loan_id, loan_instalment_id, month_paid, payment_date, 
                                         beginning_balance, payment_amount, interest_amount, 
                                         principal_amount, monitoring_fee, penalties, 
-                                        payment_method, reference_number, notes, created_at
-                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+                                        payment_method, reference_number, notes, created_at,
+                                        payment_evidence
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)";
                         $pmt_stmt = $conn->prepare($pmt_sql);
                         $pmt_notes = "Prepayment Allocation. IsCurrent: " . ($is_current ? 'Yes' : 'No');
                         $penalty_null = 0;
-                        $pmt_stmt->bind_param("iisssdddddsss",
+                        $pmt_stmt->bind_param("iisssdddddssss",
                             $loan_id,
                             $inst_id,
                             $month_paid,
@@ -386,7 +406,8 @@ try {
                             $penalty_null,
                             $payment_method,
                             $payment_reference,
-                            $pmt_notes
+                            $pmt_notes,
+                            $evidence_filename
                         );
                         $pmt_stmt->execute();
                         $pmt_stmt->close();
@@ -696,11 +717,12 @@ try {
                                     loan_id, loan_instalment_id, month_paid, payment_date, 
                                     beginning_balance, payment_amount, interest_amount, 
                                     principal_amount, monitoring_fee, penalties, 
-                                    payment_method, reference_number, notes, created_at
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+                                    payment_method, reference_number, notes, created_at,
+                                    payment_evidence
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)";
                     $pmt_stmt = $conn->prepare($pmt_sql);
                     $pmt_notes = "Recorded via Record Payment module. Narration: " . $narration;
-                    $pmt_stmt->bind_param("iisssdddddsss",
+                    $pmt_stmt->bind_param("iisssdddddssss",
                         $loan_id,
                         $instalment_id,
                         $month_paid,
@@ -712,8 +734,9 @@ try {
                         $mgmt_fee_paid,
                         $penalty_paid,
                         $payment_method,
-                        $reference_number,
-                        $pmt_notes
+                        $payment_reference,
+                        $pmt_notes,
+                        $evidence_filename
                     );
                     $pmt_stmt->execute();
                     $pmt_stmt->close();
@@ -1148,7 +1171,7 @@ endif; ?>
                                     <div class="prepay-amount-big" id="prepayTotalDisplay">0</div>
                                     <div class="text-muted small" id="prepayBreakdownText"></div>
                                 </div>
-                                <form method="POST" id="prepayForm">
+                                <form method="POST" id="prepayForm" enctype="multipart/form-data">
                                     <input type="hidden" name="action"                  value="process_prepayment">
                                     <input type="hidden" name="prepay_total_amount"     id="prepayTotalHidden">
                                     <input type="hidden" name="current_instalment_id"   id="prepayCurrentInstId">
@@ -1172,9 +1195,15 @@ endif; ?>
                                         </select>
                                     </div>
                                     <div class="mb-3">
-                                        <label class="form-label fw-semibold">Payment Reference</label>
+                                        <label class="form-label fw-bold" style="color:#6f42c1;">Payment Evidence (Photo) *</label>
+                                        <input type="file" class="form-control form-control-sm border-primary" 
+                                               name="payment_evidence" accept="image/*" required>
+                                        <small class="text-muted">Take a photo of the receipt/slip (PNG, JPG)</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-semibold">Note / Remarks (Optional)</label>
                                         <input type="text" class="form-control form-control-sm"
-                                               name="payment_reference" placeholder="Receipt #, Transaction ID...">
+                                               name="payment_reference" placeholder="Anything else to note?">
                                     </div>
                                     <button type="submit" id="prepaySubmitBtn" disabled
                                             class="btn w-100 fw-bold"
@@ -1336,7 +1365,7 @@ endif; ?>
                 <h5 class="modal-title"><i class="fas fa-credit-card me-2"></i>Process Payment</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <form id="checkoutForm" method="POST">
+            <form id="checkoutForm" method="POST" enctype="multipart/form-data">
                 <div class="modal-body">
                     <input type="hidden" name="action"            value="process_payment">
                     <input type="hidden" id="instalment_id"       name="instalment_id">
@@ -1461,9 +1490,17 @@ endif; ?>
                                 </div>
                             </div>
                             <div class="mb-3">
-                                <label>Payment Reference</label>
+                                <label class="fw-bold text-primary">Payment Evidence (Photo) *</label>
+                                <div class="p-2 border rounded bg-light">
+                                    <input type="file" class="form-control" name="payment_evidence" 
+                                           accept="image/*" required>
+                                    <small class="text-muted mt-1 d-block"><i class="fas fa-camera me-1"></i>Please upload a photo of the payment receipt. Mandatory.</small>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label>Reference / Note (Optional)</label>
                                 <input type="text" class="form-control" name="payment_reference"
-                                       placeholder="e.g., Receipt #, Transaction ID">
+                                       placeholder="Any extra info...">
                             </div>
                         </div>
                     </div>

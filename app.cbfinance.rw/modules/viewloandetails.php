@@ -118,7 +118,7 @@ if ($check_payments_table && $check_payments_table->num_rows > 0) {
         "SELECT payment_id, loan_id, payment_amount, payment_date,
                 payment_method, reference_number,
                 interest_amount, principal_amount, monitoring_fee, penalties,
-                created_at
+                created_at, payment_evidence
          FROM loan_payments WHERE loan_id = ? ORDER BY payment_date ASC"
     );
     if ($s) {
@@ -631,9 +631,9 @@ body { font-size: 12px !important; background: #f4f6fb; }
                     <td><?php echo !empty($p['reference_number']) ? '<code>'.htmlspecialchars($p['reference_number']).'</code>' : '—'; ?></td>
                     <td class="text-center">
                         <?php if (!empty($p['payment_evidence'])): ?>
-                            <a href="uploads/payments/<?php echo $p['payment_evidence']; ?>" target="_blank">
-                                <img src="uploads/payments/<?php echo $p['payment_evidence']; ?>" 
-                                     alt="Evidence" style="height:35px;width:35px;object-fit:cover;border-radius:4px;border:1px solid #ddd;">
+                            <a href="uploads/payments/<?php echo $p['payment_evidence']; ?>" 
+                               target="_blank" class="btn btn-sm btn-outline-primary" style="font-size: 0.75rem; padding: 2px 6px;">
+                                <i class="fas fa-eye me-1"></i>View Slip
                             </a>
                         <?php else: ?>
                             <span class="text-muted small">No photo</span>

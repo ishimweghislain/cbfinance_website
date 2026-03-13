@@ -38,11 +38,5 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Ensure session keys exist to prevent warnings
-if (!isset($_SESSION['user_id'])) {
-    $_SESSION['user_id'] = 0;
-}
-if (!isset($_SESSION['role'])) {
-    $_SESSION['role'] = 'Secretary'; 
-}
+// Session management is handled by individual entry points (index.php, login.php)
 ?>

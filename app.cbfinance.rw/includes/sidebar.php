@@ -1,6 +1,6 @@
 <?php
 $current_page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
-$user_role = $_SESSION['role'] ?? 'Secretary';
+$user_role = $_SESSION['role'] ?? 'Guest';
 
 require_once __DIR__ . '/approval_helper.php';
 

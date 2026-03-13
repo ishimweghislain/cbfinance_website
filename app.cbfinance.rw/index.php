@@ -1,6 +1,17 @@
 <?php
 ob_start();
 include 'config/database.php';
+
+// Server-side authentication check
+if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+    // Clear client-side session if server session is gone to prevent loops
+    echo "<script>
+        localStorage.removeItem('authSession');
+        localStorage.removeItem('authExpiry');
+        window.location.href = 'login.php?reason=expired';
+    </script>";
+    exit();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">

@@ -7,8 +7,8 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-require_once __DIR__ . '/config/database.php';
-require_once __DIR__ . '/includes/accounting_functions.php';
+require_once __DIR__ . '/app.cbfinance.rw/config/database.php';
+require_once __DIR__ . '/app.cbfinance.rw/includes/accounting_functions.php';
 
 $conn = getConnection();
 if (!$conn) {

@@ -1195,10 +1195,10 @@ endif; ?>
                                         </select>
                                     </div>
                                     <div class="mb-3">
-                                        <label class="form-label fw-bold" style="color:#6f42c1;">Payment Evidence (Photo) *</label>
+                                        <label class="form-label fw-bold" style="color:#6f42c1;">Payment Evidence (Photo)</label>
                                         <input type="file" class="form-control form-control-sm border-primary" 
-                                               name="payment_evidence" accept="image/*" required>
-                                        <small class="text-muted">Take a photo of the receipt/slip (PNG, JPG)</small>
+                                               name="payment_evidence" accept="image/*">
+                                        <small class="text-muted">Take a photo of the receipt/slip (PNG, JPG) - Optional</small>
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label fw-semibold">Note / Remarks (Optional)</label>
@@ -1490,11 +1490,11 @@ endif; ?>
                                 </div>
                             </div>
                             <div class="mb-3">
-                                <label class="fw-bold text-primary">Payment Evidence (Photo) *</label>
+                                <label class="fw-bold text-primary">Payment Evidence (Photo)</label>
                                 <div class="p-2 border rounded bg-light">
                                     <input type="file" class="form-control" name="payment_evidence" 
-                                           accept="image/*" required>
-                                    <small class="text-muted mt-1 d-block"><i class="fas fa-camera me-1"></i>Please upload a photo of the payment receipt. Mandatory.</small>
+                                           accept="image/*">
+                                    <small class="text-muted mt-1 d-block"><i class="fas fa-camera me-1"></i>Please upload a photo of the payment receipt. (Optional)</small>
                                 </div>
                             </div>
                             <div class="mb-3">

@@ -249,8 +249,8 @@ if ($customer_id > 0 && !empty($current_disb_date)) {
         if ($check_payments_table && $check_payments_table->num_rows > 0) {
             $s = $conn->prepare(
                 "SELECT payment_id, payment_amount, payment_date, payment_method,
-                        reference_number, received_by, payment_status, created_at
-                 FROM payments WHERE loan_id = ? ORDER BY payment_date ASC"
+                        reference_number, created_at
+                 FROM loan_payments WHERE loan_id = ? ORDER BY payment_date ASC"
             );
             if ($s) {
                 $s->bind_param("i", $plid);
@@ -260,12 +260,10 @@ if ($customer_id > 0 && !empty($current_disb_date)) {
             }
         }
 
-        // Accurate total paid — prefer payments table completed records
+        // Accurate total paid — all records in loan_payments are confirmed
         $paid_from_pmts = 0;
         foreach ($previous_loans[$pli]['payments'] as $p) {
-            if (strtolower(isset($p['payment_status']) ? $p['payment_status'] : '') === 'completed') {
-                $paid_from_pmts += floatval($p['payment_amount']);
-            }
+            $paid_from_pmts += floatval($p['payment_amount']);
         }
         $paid_from_inst = 0;
         foreach ($previous_loans[$pli]['instalments'] as $i2) {
@@ -695,6 +693,27 @@ body { font-size: 12px !important; background: #f4f6fb; }
 </div>
 <?php endif; ?>
 
+<!-- Quick actions -->
+<div class="card no-print bg-light border-0 mb-4" style="box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
+        <div>
+            <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-bolt me-2"></i>Quick Actions</h5>
+            <p class="text-muted small mb-0">Manage and process this loan immediately</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="index.php?page=recordpayment&loan_id=<?php echo $loan_id; ?>" class="btn btn-success px-3 py-2 fw-bold shadow-sm">
+                <i class="fas fa-money-bill-wave me-2"></i>Record Payment
+            </a>
+            <a href="index.php?page=editloan&id=<?php echo $loan_id; ?>" class="btn btn-warning px-3 py-2 fw-bold shadow-sm">
+                <i class="fas fa-edit me-2"></i>Edit Loan Details
+            </a>
+            <button onclick="window.print()" class="btn btn-primary px-3 py-2 fw-bold shadow-sm">
+                <i class="fas fa-print me-2"></i>Print Statement
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- ══════════════════════════════════════════════════════════════
      PREVIOUS LOAN HISTORY — click row opens modal
 ══════════════════════════════════════════════════════════════════ -->
@@ -911,17 +930,6 @@ body { font-size: 12px !important; background: #f4f6fb; }
     </div>
 </div>
 
-<!-- Quick actions -->
-<div class="card no-print bg-light border-0">
-    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div><h6 class="mb-0">Quick Actions</h6><p class="text-muted small mb-0">Manage this loan</p></div>
-        <div class="d-flex gap-2 flex-wrap">
-            <a href="index.php?page=recordpayment&loan_id=<?php echo $loan_id; ?>" class="btn btn-success"><i class="fas fa-money-bill-wave me-1"></i>Record Payment</a>
-            <a href="index.php?page=editloan&id=<?php echo $loan_id; ?>" class="btn btn-warning"><i class="fas fa-edit me-1"></i>Edit Loan</a>
-            <button onclick="window.print()" class="btn btn-primary"><i class="fas fa-print me-1"></i>Print</button>
-        </div>
-    </div>
-</div>
 
 </div><!-- /container-fluid -->
 
@@ -1087,7 +1095,7 @@ body { font-size: 12px !important; background: #f4f6fb; }
                             <td class="text-center">
                                 <?php if ($p_done): ?>
                                 <button class="btn btn-outline-danger btn-sm py-1" 
-                                        onclick="if(confirm('🚨 WARNING: Delete this payment? \n\nThis reverses the balance and ledger.')) window.location.href='?page=delete_payment&payment_id=<?php echo $p['payment_id']; ?>&loan_id=<?php echo $plid; ?>';">
+                                        onclick="if(confirm('🚨 WARNING: Delete this payment? \n\nThis reverses the balance and ledger.')) window.location.href='?page=delete_payment&payment_id=<?php echo $p['payment_id'] ?? 0; ?>&loan_id=<?php echo $plid; ?>';">
                                     <i class="fas fa-trash-alt"></i> Delete
                                 </button>
                                 <?php endif; ?>

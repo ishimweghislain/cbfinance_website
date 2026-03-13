@@ -82,7 +82,9 @@ if ($check_instalments_table && $check_instalments_table->num_rows > 0) {
     $s = $conn->prepare(
         "SELECT instalment_id, loan_id, instalment_number, due_date,
                 principal_amount, interest_amount, management_fee as fees_amount, total_payment as total_amount,
-                paid_amount as amount_paid, balance_remaining as balance_due, status as payment_status, payment_date as paid_date,
+                paid_amount as amount_paid, balance_remaining as balance_due, balance_remaining,
+                penalty_amount, penalty_paid,
+                status as payment_status, payment_date as paid_date,
                 days_overdue, created_at, updated_at
          FROM loan_instalments WHERE loan_id = ? ORDER BY instalment_number ASC"
     );
@@ -230,7 +232,9 @@ if ($customer_id > 0 && !empty($current_disb_date)) {
             $s = $conn->prepare(
                 "SELECT instalment_number, due_date, principal_amount, interest_amount,
                         management_fee as fees_amount, total_payment as total_amount, paid_amount as amount_paid, 
-                        balance_remaining as balance_due, status as payment_status, payment_date as paid_date, days_overdue
+                        balance_remaining as balance_due, balance_remaining,
+                        penalty_amount, penalty_paid,
+                        status as payment_status, payment_date as paid_date, days_overdue
                  FROM loan_instalments WHERE loan_id = ? ORDER BY instalment_number ASC"
             );
             if ($s) {
@@ -550,7 +554,7 @@ body { font-size: 12px !important; background: #f4f6fb; }
                 foreach ($instalments as $inst_row) {
                     $sum_penalties_due  += floatval($inst_row['penalty_amount'] ?? 0);
                     $sum_penalties_paid += floatval($inst_row['penalty_paid'] ?? 0);
-                    $sum_schedule_bal   += floatval($inst_row['balance_remaining'] ?? 0);
+                    $sum_schedule_bal   += floatval($inst_row['balance_due'] ?? $inst_row['balance_remaining'] ?? 0);
                 }
             }
             $remaining_penalties = max(0, $sum_penalties_due - $sum_penalties_paid);

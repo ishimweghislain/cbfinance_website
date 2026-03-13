@@ -35,9 +35,9 @@ while ($loan = $res->fetch_assoc()) {
     
     // 2. Explicitly force P+I math on summary columns to be 100% sure
     $conn->query("UPDATE loan_portfolio SET 
-        principal_outstanding = GREATEST(0, (SELECT IFNULL(SUM(principal_amount - principal_paid), 0) FROM loan_instalments WHERE loan_id = $id)),
-        interest_outstanding  = GREATEST(0, (SELECT IFNULL(SUM(interest_amount - interest_paid), 0) FROM loan_instalments WHERE loan_id = $id)),
-        total_outstanding     = GREATEST(0, (SELECT IFNULL(SUM(principal_amount - principal_paid + interest_amount - interest_paid), 0) FROM loan_instalments WHERE loan_id = $id))
+        principal_outstanding = (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid)), 0) FROM loan_instalments WHERE loan_id = $id),
+        interest_outstanding  = (SELECT IFNULL(SUM(GREATEST(0, interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = $id),
+        total_outstanding     = (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = $id)
         WHERE loan_id = $id");
 
     $count++;

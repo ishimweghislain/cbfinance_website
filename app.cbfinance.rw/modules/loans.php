@@ -168,7 +168,7 @@ if (!$loans) {
     $error_message = "Failed to fetch loans: " . $conn->error;
 }
 
-// **CALCULATE TOTAL OUTSTANDING & DUE FOR ALL LOANS**
+// **CALCULATE TOTAL OUTSTANDING & DUE (Global Residue - anything not fully closed)**
 $totals_all_query = "SELECT SUM(principal_outstanding) as total_po, SUM(total_outstanding) as total_to FROM loan_portfolio";
 $totals_all_result = $conn->query($totals_all_query);
 $total_outstanding_all = 0;
@@ -176,6 +176,18 @@ $total_due_all = 0;
 if ($totals_all_result && $row = $totals_all_result->fetch_assoc()) {
     $total_outstanding_all = floatval($row['total_po']);
     $total_due_all = floatval($row['total_to']);
+}
+
+// **ACTIVE PORTFOLIO TOTALS (Matches Dashboard)**
+$active_statuses = "'Active', 'Performing', 'Overdue', 'Written-off'";
+$active_totals_query = "SELECT SUM(principal_outstanding) as active_po, SUM(total_outstanding) as active_to 
+                        FROM loan_portfolio 
+                        WHERE loan_status IN ($active_statuses)";
+$active_totals_res = $conn->query($active_totals_query);
+$active_po = 0; $active_to = 0;
+if ($active_totals_res && $row = $active_totals_res->fetch_assoc()) {
+    $active_po = floatval($row['active_po']);
+    $active_to = floatval($row['active_to']);
 }
 
 // Calculate outstanding, total due, and disbursed for filtered loans only
@@ -195,10 +207,13 @@ if ($loans && $loans->num_rows > 0) {
     mysqli_data_seek($loans, 0); // reset pointer
 }
 
-// Use filtered values if filter is active, otherwise use totals
-$total_outstanding = ($filter_status != 'all') ? $filtered_outstanding : $total_outstanding_all;
-$total_due         = ($filter_status != 'all') ? $filtered_total_due   : $total_due_all;
-$total_disbursed   = ($filter_status != 'all') ? $total_disbursed      : $total_disbursed; // It already contains filtered or all based on query
+// Use active values if status is all, otherwise use filtered values
+$total_outstanding = ($filter_status == 'all') ? $active_po : $filtered_outstanding;
+$total_due         = ($filter_status == 'all') ? $active_to : $filtered_total_due;
+
+// Total Disbursed - Always show global if status is all
+$total_disbursed_all = $conn->query("SELECT SUM(total_disbursed) FROM loan_portfolio")->fetch_row()[0] ?? 0;
+$total_disbursed     = ($filter_status == 'all') ? $total_disbursed_all : $total_disbursed;
 
 // Get total counts without filter for the statistics
 $total_query = "SELECT loan_status, COUNT(*) as count FROM loan_portfolio GROUP BY loan_status";

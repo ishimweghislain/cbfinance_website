@@ -19,7 +19,13 @@ echo "<h2>🚀 Starting Hosted Data Repair...</h2>";
 
 // ── SPECIAL FIX FOR PETER (Loan #260) ──
 echo "<p>Applying manual correction for Peter's loan schedule...</p>";
-$conn->query("UPDATE loan_instalments SET status='Pending', paid_amount=0, principal_paid=0, interest_paid=0, management_fee_paid=0, balance_remaining=total_payment WHERE loan_id=260");
+$conn->query("UPDATE loan_instalments SET status='Pending', paid_amount=0, principal_paid=0, interest_paid=0, management_fee_paid=0, penalty_paid=0, balance_remaining=total_payment, payment_date=NULL WHERE loan_id=260");
+
+// Also delete all recorded payments and ledger entries for this loan to fix history
+echo "<p>Cleaning up payment history for Peter...</p>";
+$conn->query("DELETE FROM loan_payments WHERE loan_id=260");
+$conn->query("DELETE FROM ledger WHERE reference_type IN ('loan_payment', 'loan_prepayment') AND reference_id IN (SELECT instalment_id FROM loan_instalments WHERE loan_id=260)");
+
 // Fix Installment 3 Principal specifically for Peter to match requested 1.816M total
 $conn->query("UPDATE loan_instalments SET opening_balance=455854, principal_amount=455854, interest_amount=22793, total_payment=577646, closing_balance=0, balance_remaining=577646 WHERE loan_id=260 AND instalment_number=3");
 

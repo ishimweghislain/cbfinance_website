@@ -480,20 +480,15 @@ try {
 
                     $conn->commit();
 
-                    $success_message = "Prepayment of " . number_format($prepay_amount, 0) .
+                    $_SESSION['success_message'] = "Prepayment of " . number_format($prepay_amount, 0) .
                         " processed successfully across " . count($prepay_instalment_ids) . " instalment(s)!";
                     if ($total_future_interest_waived > 0 || $total_future_mgmt_waived > 0) {
-                        $success_message .= " | Future interest waived: " . number_format($total_future_interest_waived, 0) .
+                        $_SESSION['success_message'] .= " | Future interest waived: " . number_format($total_future_interest_waived, 0) .
                             ", Future fees waived: " . number_format($total_future_mgmt_waived, 0) . ".";
                     }
 
-                    // Refresh instalments
-                    $all_instalments_stmt = $conn->prepare($all_instalments_query);
-                    $all_instalments_stmt->bind_param("i", $loan_id);
-                    $all_instalments_stmt->execute();
-                    $all_instalments_result = $all_instalments_stmt->get_result();
-                    $existing_instalments = $all_instalments_result->fetch_all(MYSQLI_ASSOC);
-                    $all_instalments_stmt->close();
+                    header("Location: " . $_SERVER['PHP_SELF'] . "?page=recordpayment&loan_id=" . $loan_id);
+                    exit();
 
                 }
                 catch (Exception $e) {
@@ -823,15 +818,9 @@ try {
 
                     $conn->commit();
 
-                    $success_message = "Payment recorded successfully! Amount: " . number_format($actual_payment_amount, 0);
-
-                    // Refresh instalments
-                    $all_instalments_stmt = $conn->prepare($all_instalments_query);
-                    $all_instalments_stmt->bind_param("i", $loan_id);
-                    $all_instalments_stmt->execute();
-                    $all_instalments_result = $all_instalments_stmt->get_result();
-                    $existing_instalments = $all_instalments_result->fetch_all(MYSQLI_ASSOC);
-                    $all_instalments_stmt->close();
+                    $_SESSION['success_message'] = "Payment recorded successfully! Amount: " . number_format($actual_payment_amount, 0);
+                    header("Location: " . $_SERVER['PHP_SELF'] . "?page=recordpayment&loan_id=" . $loan_id);
+                    exit();
 
                 }
                 catch (Exception $e) {
@@ -1036,9 +1025,15 @@ endif; ?>
     </div>
     <?php
 endif; ?>
-    <?php if ($success_message): ?>
+    <?php 
+    $disp_success = $success_message;
+    if (isset($_SESSION['success_message'])) {
+        $disp_success = $_SESSION['success_message'];
+        unset($_SESSION['success_message']);
+    }
+    if ($disp_success): ?>
     <div class="alert alert-success alert-dismissible fade show no-print">
-        <i class="fas fa-check-circle me-2"></i><?php echo $success_message; ?>
+        <i class="fas fa-check-circle me-2"></i><?php echo $disp_success; ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     <?php

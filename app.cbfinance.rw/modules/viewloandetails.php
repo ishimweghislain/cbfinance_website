@@ -382,9 +382,8 @@ foreach ($instalments as $i2) {
 }
 // Use payment records if they exist (more accurate), otherwise fall back to instalment paid_amount sum
 $total_paid = ($total_paid_from_pmts > 0) ? $total_paid_from_pmts : $total_paid_from_inst;
-if ($total_paid == 0 && $disbursement_amount > 0 && $total_outstanding > 0) {
-    $total_paid = $disbursement_amount - $total_outstanding;
-}
+// Ensure we never show a negative paid amount
+$total_paid = max(0, $total_paid);
 
 $paid_inst = $pending_inst = $overdue_inst = $partial_inst = 0;
 foreach ($instalments as $i2) {

@@ -102,31 +102,25 @@ try {
         $rev_stmt->execute();
         $rev_stmt->close();
 
-        // ── 3b. Trigger schedule recalculation for future instalments ───────
-        $current_inst_num = intval($inst_check['instalment_number']);
-        recalculateRemainingSchedule($conn, $loan_id, $current_inst_num, $new_closing, $interest_rate, $mgmt_fee_rate);
+        // ── 3b. Trigger schedule recalculation only if it was an OVERPAYMENT ─────────────────
+        // We only re-amortize if the original payment was more than what was due (prepayment).
+        // Otherwise, we just sync the portfolio to keep the original fixed schedule.
+        $beg_bal = floatval($pmt['beginning_balance'] ?? 0);
+        $total_paid_to_loan = $amount - $penalty_paid;
+
+        if ($beg_bal > 0 && $total_paid_to_loan > $beg_bal + 1) { // +1 for rounding buffer
+            recalculateRemainingSchedule($conn, $loan_id, $current_inst_num, $new_closing, $interest_rate, $mgmt_fee_rate);
+        } else {
+            // No recalculation needed; just sync portfolio to reflect the reversed principal/interest
+            syncLoanPortfolio($conn, $loan_id);
+        }
     }
 
-    // ── 4. Reverse loan portfolio totals ─────────────────────────────────────
-    $port_stmt = $conn->prepare(
-        "UPDATE loan_portfolio SET
-            total_paid                  = GREATEST(0, total_paid - ?),
-            total_principal_paid        = GREATEST(0, total_principal_paid - ?),
-            total_interest_paid         = GREATEST(0, total_interest_paid - ?),
-            total_management_fees_paid  = GREATEST(0, total_management_fees_paid - ?),
-            principal_outstanding       = principal_outstanding + ?,
-            interest_outstanding        = interest_outstanding + ?,
-            total_outstanding           = (principal_outstanding + ?) + (interest_outstanding + ?),
-            loan_status                 = 'Active',
-            updated_at                  = NOW()
-         WHERE loan_id = ?"
-    );
-    $port_stmt->bind_param("ddddddddi",
-        $amount, $principal_paid, $interest_paid, $mgmt_fee_paid,
-        $principal_paid, $interest_paid, $principal_paid, $interest_paid, $loan_id
-    );
-    $port_stmt->execute();
-    $port_stmt->close();
+    // ── 4. Ensure Portfolio is accurately synced ──────────────────────────
+    // syncLoanPortfolio is the source of truth—it sums all installments to get totals.
+    // We already called it inside the installment reversal logic above, but we call it
+    // one more time here to be absolutely sure the portfolio matches the database state.
+    syncLoanPortfolio($conn, $loan_id);
 
     // ── 5. Remove ledger entries tied to this payment ─────────────────────────
     // Try by payment_id reference first, then fall back to instalment_id

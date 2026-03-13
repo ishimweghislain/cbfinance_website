@@ -797,8 +797,10 @@ try {
                     // --- EARLY REPAYMENT / SCHEDULE RECALCULATION ---
 
                     // Trigger recalculation for the rest of the schedule
-                    if ($principal_paid > 0) {
+                    if ($total_paid > $current_balance + 1) {
                         recalculateRemainingSchedule($conn, $loan_id, $current_inst_num, $actual_closing_balance_for_row, $interest_rate, $mgmt_fee_rate);
+                    } else {
+                        syncLoanPortfolio($conn, $loan_id);
                     }
 
                     $check_pending_stmt = $conn->prepare(

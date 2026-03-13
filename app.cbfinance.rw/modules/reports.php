@@ -18,11 +18,11 @@ if ($export_format === 'csv') {
     switch ($report_type) {
         case 'portfolio':   $title = 'Loan Portfolio Report';    $q = buildPortfolioQuery($conn, $start_date, $end_date, $customer_filter, $status_filter); break;
         case 'instalments': $title = 'Loan Instalments Report';  $q = buildInstalmentsQuery($conn, $start_date, $end_date, $customer_filter, $status_filter); break;
-        case 'customers':   $title = 'Customers Report';         $q = buildCustomersQuery($conn, $start_date, $end_date); break;
+        case 'customers':   $title = 'Customers Report';         $q = buildCustomersQuery($conn, $start_date, $end_date, $customer_filter); break;
         case 'overdue':     $title = 'Overdue Loans Report';     $q = buildOverdueQuery($conn, $start_date, $end_date, $customer_filter); break;
         case 'payments':    $title = 'Payments Report';          $q = buildPaymentsQuery($conn, $start_date, $end_date, $customer_filter); break;
         case 'provisions':  $title = 'Provisions Report';        $q = buildProvisionsQuery($conn, $start_date, $end_date, $customer_filter); break;
-        case 'summary':     $title = 'Portfolio Summary Report'; $q = buildSummaryQuery($conn, $start_date, $end_date); break;
+        case 'summary':     $title = 'Portfolio Summary Report'; $q = buildSummaryQuery($conn, $start_date, $end_date, $customer_filter); break;
         default:            $title = 'Report'; $q = '';
     }
 
@@ -55,6 +55,7 @@ function buildPortfolioQuery($conn, $sd, $ed, $cf, $sf) {
     } else {
         $w[] = "lp.disbursement_date BETWEEN '{$sd}' AND '{$ed}'";
     }
+    if ($cf) $w[] = "lp.customer_id = " . intval($cf);
     $wc = implode(' AND ', $w);
     return "SELECT lp.*, c.customer_name, c.customer_code, c.phone, c.email, c.address,
         (SELECT MAX(DATEDIFF(CURDATE(), due_date)) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) as max_days_overdue,
@@ -89,14 +90,17 @@ function buildInstalmentsQuery($conn, $sd, $ed, $cf, $sf) {
         WHERE {$wc} ORDER BY li.due_date DESC";
 }
 
-function buildCustomersQuery($conn, $sd, $ed) {
+function buildCustomersQuery($conn, $sd, $ed, $cf) {
     $sd = mysqli_real_escape_string($conn, $sd);
     $ed = mysqli_real_escape_string($conn, $ed);
+    $w = ["c.created_at BETWEEN '{$sd} 00:00:00' AND '{$ed} 23:59:59'"];
+    if ($cf) $w[] = "c.customer_id = " . intval($cf);
+    $wc = implode(' AND ', $w);
     return "SELECT c.*, COUNT(DISTINCT lp.loan_id) as total_loans,
         SUM(lp.total_disbursed) as total_disbursed, SUM(lp.total_outstanding) as total_outstanding,
         SUM(lp.total_paid) as total_paid, MAX(lp.created_at) as last_loan_date
         FROM customers c LEFT JOIN loan_portfolio lp ON c.customer_id = lp.customer_id
-        WHERE c.created_at BETWEEN '{$sd} 00:00:00' AND '{$ed} 23:59:59'
+        WHERE {$wc}
         GROUP BY c.customer_id ORDER BY c.customer_name";
 }
 
@@ -167,13 +171,17 @@ function buildProvisionsQuery($conn, $sd, $ed, $cf) {
         WHERE {$wc} GROUP BY lp.loan_id ORDER BY provision_amount DESC";
 }
 
-function buildSummaryQuery($conn, $sd, $ed) {
+function buildSummaryQuery($conn, $sd, $ed, $cf) {
     $sd = mysqli_real_escape_string($conn, $sd);
     $ed = mysqli_real_escape_string($conn, $ed);
     
     // If we're looking at "today's" auto-report, match the dashboard by not filtering active loans by date
     $is_all_time = (empty($_GET['start_date']));
     $date_clause = $is_all_time ? "1=1" : "lp.disbursement_date BETWEEN '{$sd}' AND '{$ed}'";
+    if ($cf) $date_clause .= " AND lp.customer_id = " . intval($cf);
+
+    $penalty_clause = "lp2.disbursement_date BETWEEN '{$sd}' AND '{$ed}'";
+    if ($cf) $penalty_clause .= " AND lp2.customer_id = " . intval($cf);
 
     return "SELECT
         COUNT(DISTINCT lp.loan_id) as total_loans, COUNT(DISTINCT lp.customer_id) as total_customers,
@@ -192,7 +200,7 @@ function buildSummaryQuery($conn, $sd, $ed) {
         SUM(lp.total_principal_paid) as total_principal_paid,
         SUM(lp.total_interest_paid) as total_interest_paid,
         SUM(lp.total_management_fees_paid) as total_mgmt_fees_paid,
-        (SELECT SUM(penalty_paid) FROM loan_instalments li JOIN loan_portfolio lp2 ON li.loan_id = lp2.loan_id WHERE lp2.disbursement_date BETWEEN '{$sd}' AND '{$ed}') as total_penalties_paid,
+        (SELECT SUM(penalty_paid) FROM loan_instalments li JOIN loan_portfolio lp2 ON li.loan_id = lp2.loan_id WHERE {$penalty_clause}) as total_penalties_paid,
         SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 1 ELSE 0 END) as active_loans_count,
         SUM(CASE WHEN (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0 AND lp.loan_status IN ('Active', 'Performing', 'Overdue') THEN 1 ELSE 0 END) as overdue_loans_count,
         SUM(CASE WHEN lp.loan_status='Suspended' THEN 1 ELSE 0 END) as suspended_loans,
@@ -509,12 +517,12 @@ $customers_result = $conn->query(
 $sd_esc = mysqli_real_escape_string($conn, $start_date);
 $ed_esc = mysqli_real_escape_string($conn, $end_date);
 
-$stats = $conn->query(
-    "SELECT COUNT(*) as total_loans, SUM(total_disbursed) as total_disbursed,
+$stats_sql = "SELECT COUNT(*) as total_loans, SUM(total_disbursed) as total_disbursed,
      SUM(total_outstanding) as total_outstanding, SUM(total_paid) as total_paid
      FROM loan_portfolio
-     WHERE disbursement_date BETWEEN '{$sd_esc}' AND '{$ed_esc}'"
-)->fetch_assoc();
+     WHERE disbursement_date BETWEEN '{$sd_esc}' AND '{$ed_esc}'";
+if ($customer_filter) $stats_sql .= " AND customer_id = " . intval($customer_filter);
+$stats = $conn->query($stats_sql)->fetch_assoc();
 
 ?>
 <!DOCTYPE html>

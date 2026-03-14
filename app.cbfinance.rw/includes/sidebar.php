@@ -57,10 +57,10 @@ function canSeeReports($role)
 <nav id="sidebar" class="col-md-3 col-lg-2 d-md-block bg-primary sidebar">
     <div class="position-sticky pt-3">
         <div class="sidebar-header text-center py-4">
-            <h4 class="text-white fw-bold">
-                <i class="bi bi-wallet2"></i>
-                <span class="ms-2">CB FINANCE</span>
-            </h4>
+            <h5 class="text-white fw-bold">
+                <i class="bi bi-wallet2 fs-4 text-light"></i>
+                <span class="d-block mt-2" style="font-size: 0.95rem; letter-spacing: 0.5px; opacity: 0.95;">Capital BRIDGE <span style="font-size: 0.8rem; font-weight: normal; opacity: 0.8;">FINANCE</span></span>
+            </h5>
         </div>
 
         <!-- ── Waving Hi Section ── -->
@@ -281,7 +281,8 @@ endif; ?>
                     <i class="bi bi-people me-2"></i> User Management
                 </a>
             </li>
-            <?php endif; ?>
+            <?php
+endif; ?>
 
             <!-- ── SEPARATE RED LOGOUT BUTTON ── -->
             <li class="nav-item mt-5 mb-4 px-3">

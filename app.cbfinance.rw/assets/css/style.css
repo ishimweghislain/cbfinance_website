@@ -43,7 +43,7 @@ body {
     background-color: #ffffff;
     color: var(--primary-blue) !important;
     font-weight: 700;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
 #sidebar .nav-link i {
@@ -68,19 +68,43 @@ body {
 }
 
 @keyframes wave {
-    0% { transform: rotate( 0deg) }
-    10% { transform: rotate(14deg) }
-    20% { transform: rotate(-8deg) }
-    30% { transform: rotate(14deg) }
-    40% { transform: rotate(-4deg) }
-    50% { transform: rotate(10deg) }
-    60% { transform: rotate( 0deg) }
-    100% { transform: rotate( 0deg) }
+    0% {
+        transform: rotate(0deg)
+    }
+
+    10% {
+        transform: rotate(14deg)
+    }
+
+    20% {
+        transform: rotate(-8deg)
+    }
+
+    30% {
+        transform: rotate(14deg)
+    }
+
+    40% {
+        transform: rotate(-4deg)
+    }
+
+    50% {
+        transform: rotate(10deg)
+    }
+
+    60% {
+        transform: rotate(0deg)
+    }
+
+    100% {
+        transform: rotate(0deg)
+    }
 }
 
 /* ─── ENFORCED RED LOGOUT ─── */
 .nav-link.btn-sidebar-logout {
-    background-color: #dc3545 !important; /* Bold Red */
+    background-color: #dc3545 !important;
+    /* Bold Red */
     background: #dc3545 !important;
     color: #ffffff !important;
     border-radius: 10px !important;
@@ -112,13 +136,33 @@ body {
 }
 
 @keyframes sidebar-wave-infinite {
-    0% { transform: rotate( 0.0deg) }
-    15% { transform: rotate(18.0deg) }
-    30% { transform: rotate(-10.0deg) }
-    45% { transform: rotate(18.0deg) }
-    60% { transform: rotate(-6.0deg) }
-    75% { transform: rotate(12.0deg) }
-    100% { transform: rotate( 0.0deg) }
+    0% {
+        transform: rotate(0.0deg)
+    }
+
+    15% {
+        transform: rotate(18.0deg)
+    }
+
+    30% {
+        transform: rotate(-10.0deg)
+    }
+
+    45% {
+        transform: rotate(18.0deg)
+    }
+
+    60% {
+        transform: rotate(-6.0deg)
+    }
+
+    75% {
+        transform: rotate(12.0deg)
+    }
+
+    100% {
+        transform: rotate(0.0deg)
+    }
 }
 
 /* Typing Animation Refinement */
@@ -142,7 +186,9 @@ body {
 }
 
 @keyframes cursor-blink {
-    50% { border-color: transparent }
+    50% {
+        border-color: transparent
+    }
 }
 
 /* Card Styling */

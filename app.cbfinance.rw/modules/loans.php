@@ -191,8 +191,8 @@ $portfolio_stats_query = "SELECT
     ELSE 0 END), 0) as portfolio_value,
     
     -- 5. Total Overdue (Live)
-    COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue') THEN 
-        (SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE() AND payment_date IS NULL) 
+    COALESCE(SUM(CASE WHEN lp.loan_status IN ($active_statuses) THEN 
+        (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE()) 
     ELSE 0 END), 0) as total_overdue
 FROM loan_portfolio lp";
 
@@ -211,7 +211,7 @@ if ($filter_status != 'all') {
         COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as active_principal,
         COALESCE(SUM((SELECT SUM(GREATEST(0, interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as active_interest,
         COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as portfolio_value,
-        COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE() AND payment_date IS NULL)), 0) as total_overdue
+        COALESCE(SUM((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())), 0) as total_overdue
         FROM loan_portfolio lp WHERE lp.loan_status = '" . mysqli_real_escape_string($conn, $filter_status) . "'";
     $f_res = $conn->query($filtered_query);
     if ($f_res) $ps = $f_res->fetch_assoc();

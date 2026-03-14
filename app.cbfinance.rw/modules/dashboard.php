@@ -50,8 +50,8 @@ try {
         ELSE 0 END), 0) as portfolio_value,
         
         -- Total Overdue (Live)
-        COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue') THEN 
-            (SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE() AND payment_date IS NULL) 
+        COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
+            (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE()) 
         ELSE 0 END), 0) as total_overdue,
         
         COUNT(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 1 END) as active_loans_count
@@ -153,15 +153,17 @@ try {
     $total_liabilities = $stats['liabilities']['total_liabilities'] ?? 0;
     $stats['equity']['total_equity'] = $total_assets - $total_liabilities;
     
-    // 13. Overdue Loans - Live P+I Math
+    // 13. Overdue Loans - Live Sync with Portfolio
     $result = $conn->query("SELECT 
         COUNT(*) as overdue_loans, 
-        COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())), 0) as overdue_amount 
+        COALESCE(SUM((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())), 0) as overdue_amount 
         FROM loan_portfolio lp
-        WHERE (lp.days_overdue > 0 OR (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) > 0)
-        AND lp.loan_status IN ('Active', 'Performing', 'Overdue')");
+        WHERE lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off')
+        AND (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND balance_remaining > 0 AND due_date < CURDATE()) > 0");
     if ($result) {
         $stats['overdue'] = $result->fetch_assoc();
+        // Sync the value back to the primary portfolio stats for the header card
+        $stats['portfolio']['total_overdue'] = $stats['overdue']['overdue_amount'];
     }
 
     // 14. Latest Activity Logs (for Developers)

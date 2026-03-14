@@ -59,7 +59,7 @@ function buildPortfolioQuery($conn, $sd, $ed, $cf, $sf) {
     $wc = implode(' AND ', $w);
     return "SELECT lp.*, c.customer_name, c.customer_code, c.phone, c.email, c.address,
         (SELECT MAX(DATEDIFF(CURDATE(), due_date)) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL AND due_date < CURDATE()) as max_days_overdue,
-        (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE() AND lp.loan_status IN ('Active', 'Performing', 'Overdue')) as total_overdue_amount,
+        (SELECT IFNULL(SUM(balance_remaining), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE() AND lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off')) as total_overdue_amount,
         (CASE WHEN lp.loan_status = 'Closed' THEN 0 ELSE (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) END) as live_principal_outstanding,
         (CASE WHEN lp.loan_status = 'Closed' THEN 0 ELSE (SELECT IFNULL(SUM(GREATEST(0, interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) END) as live_interest_outstanding,
         (CASE WHEN lp.loan_status = 'Closed' THEN 0 ELSE (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) END) as live_total_outstanding,
@@ -204,8 +204,8 @@ function buildSummaryQuery($conn, $sd, $ed, $cf) {
             (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) 
         ELSE 0 END) as portfolio_value,
 
-        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue') THEN 
-            (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE() AND payment_date IS NULL) 
+        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
+            (SELECT IFNULL(SUM(balance_remaining), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE()) 
         ELSE 0 END) as total_overdue,
         
         SUM((SELECT IFNULL(SUM(paid_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_paid,
@@ -539,8 +539,8 @@ $stats_sql = "SELECT
         COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
             (SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id) 
         ELSE 0 END), 0) as portfolio_value,
-        COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue') THEN 
-            (SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE() AND payment_date IS NULL) 
+        COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
+            (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE()) 
         ELSE 0 END), 0) as total_overdue
      FROM loan_portfolio lp
      WHERE disbursement_date BETWEEN '{$sd_esc}' AND '{$ed_esc}'";

@@ -31,22 +31,40 @@ $classes_summary = null;
 try {
     // Get dashboard statistics
     
-    // 1. Total Portfolio Categorized (Matches Reports)
-    // ACTIVE + WRITTEN OFF (This is the "Outstanding" risk)
-    $active_res = $conn->query("SELECT 
-        COUNT(*) as count, 
-        COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as principal_outstanding,
-        COALESCE(SUM((SELECT SUM(GREATEST(0, interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as interest_outstanding,
-        COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as total_outstanding 
-        FROM loan_portfolio lp WHERE lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off')");
-    $stats['loans'] = $active_res->fetch_assoc();
-
-    // GLOBAL (All 91 loans)
-    $global_res = $conn->query("SELECT 
-        COUNT(*) as total_loans, 
-        COALESCE(SUM(total_disbursed) , 0) as total_disbursed
-        FROM loan_portfolio");
-    $stats['global'] = $global_res->fetch_assoc();
+    // 1. Unified Portfolio Metrics (Live Math for Accuracy)
+    $portfolio_res = $conn->query("SELECT 
+        -- Total Disbursed (Global)
+        COALESCE(SUM(total_disbursed), 0) as total_distributed,
+        
+        -- Active Portfolio metrics (Active, Performing, Overdue, Written-off)
+        COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
+            (SELECT SUM(GREATEST(0, principal_amount - principal_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id) 
+        ELSE 0 END), 0) as active_principal,
+        
+        COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
+            (SELECT SUM(GREATEST(0, interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id) 
+        ELSE 0 END), 0) as active_interest,
+        
+        COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
+            (SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id) 
+        ELSE 0 END), 0) as portfolio_value,
+        
+        -- Total Overdue (Live)
+        COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue') THEN 
+            (SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE() AND payment_date IS NULL) 
+        ELSE 0 END), 0) as total_overdue,
+        
+        COUNT(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 1 END) as active_loans_count
+        FROM loan_portfolio lp");
+    
+    $stats['portfolio'] = $portfolio_res->fetch_assoc();
+    
+    // Legacy mapping (to avoid breaking other code if any)
+    $stats['loans']['count'] = $stats['portfolio']['active_loans_count'];
+    $stats['global']['total_disbursed'] = $stats['portfolio']['total_distributed'];
+    $stats['loans']['principal_outstanding'] = $stats['portfolio']['active_principal'];
+    $stats['loans']['total_outstanding'] = $stats['portfolio']['portfolio_value'];
+    $stats['overdue']['overdue_amount'] = $stats['portfolio']['total_overdue'];
     
     // 2. Total Active Customers
     $result = $conn->query("SELECT COUNT(*) as total_customers FROM customers WHERE is_active = 1");
@@ -263,48 +281,67 @@ try {
         </div>
     </div>
 
-    <!-- Statistics Cards -->
+    <!-- Unified Portfolio Statistics -->
     <div class="row mb-4">
-        <!-- Total Loans Card -->
-        <div class="col-xl-3 col-md-6 mb-4">
+        <!-- Card 1: Total Distributed -->
+        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;">
             <div class="card border-left-primary shadow h-100 py-2 stat-card">
                 <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs fw-bold text-primary text-uppercase mb-1">
-                                Active Loans
-                            </div>
-                            <div class="h5 mb-0 fw-bold text-dark">
-                                <?php echo number_format($stats['loans']['count'] ?? 0); ?>
-                            </div>
-                            <div class="text-xs text-muted mt-1">
-                                <i class="fas fa-history fa-fw me-1"></i>
-                                Total Distributed: <strong><?php echo number_format($stats['global']['total_disbursed'] ?? 0, 2); ?></strong>
-                            </div>
-                            <div class="text-xs text-muted mt-1">
-                                <i class="fas fa-money-bill-wave fa-fw me-1"></i>
-                                Active Principal: <strong><?php echo number_format($stats['loans']['principal_outstanding'] ?? 0, 2); ?></strong>
-                            </div>
-                            <div class="text-xs text-muted mt-1">
-                                <i class="fas fa-plus-circle fa-fw me-1"></i>
-                                Active Total (P+I): <strong><?php echo number_format($stats['loans']['total_outstanding'] ?? 0, 2); ?></strong>
-                            </div>
-                            <?php if(isset($stats['overdue']) && $stats['overdue']['overdue_loans'] > 0): ?>
-                            <div class="small-stat text-danger mt-1">
-                                <i class="fas fa-exclamation-triangle fa-fw me-1"></i>
-                                <?php echo $stats['overdue']['overdue_loans']; ?> overdue: <?php echo number_format($stats['overdue']['overdue_amount'], 2); ?>
-                            </div>
-                            <?php endif; ?>
-                        </div>
-                        <div class="col-auto">
-                            <i class="fas fa-hand-holding-usd fa-2x text-primary"></i>
-                        </div>
-                    </div>
+                    <div class="text-xs fw-bold text-primary text-uppercase mb-1">Total Distributed</div>
+                    <div class="h5 mb-0 fw-bold text-dark"><?php echo number_format($stats['portfolio']['total_distributed'], 2); ?></div>
+                    <div class="small-stat text-muted mt-2">All-time disbursement</div>
                 </div>
             </div>
         </div>
 
-        <!-- Total Customers Card -->
+        <!-- Card 2: Active Principal -->
+        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;">
+            <div class="card border-left-success shadow h-100 py-2 stat-card">
+                <div class="card-body">
+                    <div class="text-xs fw-bold text-success text-uppercase mb-1">Active Principal</div>
+                    <div class="h5 mb-0 fw-bold text-dark"><?php echo number_format($stats['portfolio']['active_principal'], 2); ?></div>
+                    <div class="small-stat text-muted mt-2">Outstanding Principal</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 3: Active Interest -->
+        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;">
+            <div class="card border-left-info shadow h-100 py-2 stat-card">
+                <div class="card-body">
+                    <div class="text-xs fw-bold text-info text-uppercase mb-1">Active Interest</div>
+                    <div class="h5 mb-0 fw-bold text-dark"><?php echo number_format($stats['portfolio']['active_interest'], 2); ?></div>
+                    <div class="small-stat text-muted mt-2">Expected Interest</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 4: Portfolio Value (P+I) -->
+        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;">
+            <div class="card border-left-warning shadow h-100 py-2 stat-card">
+                <div class="card-body">
+                    <div class="text-xs fw-bold text-warning text-uppercase mb-1">Portfolio Value (P+I)</div>
+                    <div class="h5 mb-0 fw-bold text-dark"><?php echo number_format($stats['portfolio']['portfolio_value'], 2); ?></div>
+                    <div class="small-stat text-muted mt-2">Total remaining balance</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 5: Total Overdue -->
+        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;">
+            <div class="card border-left-danger shadow h-100 py-2 stat-card">
+                <div class="card-body">
+                    <div class="text-xs fw-bold text-danger text-uppercase mb-1">Total Overdue</div>
+                    <div class="h5 mb-0 fw-bold text-dark"><?php echo number_format($stats['portfolio']['total_overdue'], 2); ?></div>
+                    <div class="small-stat text-danger mt-2">Due & Unpaid instalments</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Secondary Statistics Cards -->
+    <div class="row mb-4">
+        <!-- Active Customers Card -->
         <div class="col-xl-3 col-md-6 mb-4">
             <div class="card border-left-success shadow h-100 py-2 stat-card">
                 <div class="card-body">
@@ -318,7 +355,7 @@ try {
                             </div>
                             <div class="text-xs text-muted mt-1">
                                 <i class="fas fa-user-check fa-fw me-1"></i>
-                                <?php echo number_format($stats['pending']['pending_applications'] ?? 0); ?> Pending Applications
+                                <?php echo number_format($stats['portfolio']['active_loans_count'] ?? 0); ?> Active Loans
                             </div>
                         </div>
                         <div class="col-auto">

@@ -192,9 +192,21 @@ function buildSummaryQuery($conn, $sd, $ed, $cf) {
         SUM((SELECT IFNULL(SUM(principal_amount - principal_paid + interest_amount - interest_paid), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND payment_date IS NULL)) as global_total_residue,
         
         -- ACTIVE PORTFOLIO FIELDS (Matches Dashboard Cards)
-        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) ELSE 0 END) as total_outstanding,
-        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) ELSE 0 END) as total_principal_outstanding,
-        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN (SELECT IFNULL(SUM(GREATEST(0, interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) ELSE 0 END) as total_interest_outstanding,
+        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
+            (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) 
+        ELSE 0 END) as active_principal,
+        
+        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
+            (SELECT IFNULL(SUM(GREATEST(0, interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) 
+        ELSE 0 END) as active_interest,
+        
+        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
+            (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id) 
+        ELSE 0 END) as portfolio_value,
+
+        SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue') THEN 
+            (SELECT IFNULL(SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)), 0) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE() AND payment_date IS NULL) 
+        ELSE 0 END) as total_overdue,
         
         SUM((SELECT IFNULL(SUM(paid_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_paid,
         SUM(lp.total_principal_paid) as total_principal_paid,
@@ -478,15 +490,16 @@ function formatRows($type, $data) {
                     ['── GLOBAL RECONCILIATION ──────────────', ''],
                     ['Total Loans',            number_format($r['total_loans'])],
                     ['Total Customers',        number_format($r['total_customers'])],
-                    ['Total Disbursed',        number_format($r['total_disbursed'], 2)],
+                    ['Total Distributed',      number_format($r['total_disbursed'], 2)],
                     ['Principal only (Global Residue)', number_format($r['global_principal_residue'], 2)],
                     ['Principal + Interest remaining (Global Residue)', number_format($r['global_total_residue'], 2)],
                     ['', ''],
                     ['── ACTIVE PORTFOLIO ONLY ──────────────', ''],
                     ['Active Loans count',     number_format($r['active_loans_count'])],
-                    ['Principal Outstanding',  number_format($r['total_principal_outstanding'], 2)],
-                    ['Interest Outstanding',   number_format($r['total_interest_outstanding'], 2)],
-                    ['Total Outstanding (P+I)', number_format($r['total_outstanding'], 2)],
+                    ['Active Principal',       number_format($r['active_principal'], 2)],
+                    ['Active Interest',        number_format($r['active_interest'], 2)],
+                    ['Portfolio Value (P+I)',  number_format($r['portfolio_value'], 2)],
+                    ['Total Overdue',          number_format($r['total_overdue'], 2)],
                     ['Overdue Loans count',    number_format($r['overdue_loans_count'])],
                     ['', ''],
                     ['── RECORDED PAYMENTS ──────────────────', ''],
@@ -517,11 +530,21 @@ $customers_result = $conn->query(
 $sd_esc = mysqli_real_escape_string($conn, $start_date);
 $ed_esc = mysqli_real_escape_string($conn, $end_date);
 
-$stats_sql = "SELECT COUNT(*) as total_loans, SUM(total_disbursed) as total_disbursed,
-     SUM(total_outstanding) as total_outstanding, SUM(total_paid) as total_paid
-     FROM loan_portfolio
+$stats_sql = "SELECT 
+        COUNT(*) as total_loans, 
+        SUM(total_disbursed) as total_distributed,
+        COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
+            (SELECT SUM(GREATEST(0, principal_amount - principal_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id) 
+        ELSE 0 END), 0) as active_principal,
+        COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off') THEN 
+            (SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id) 
+        ELSE 0 END), 0) as portfolio_value,
+        COALESCE(SUM(CASE WHEN lp.loan_status IN ('Active', 'Performing', 'Overdue') THEN 
+            (SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE() AND payment_date IS NULL) 
+        ELSE 0 END), 0) as total_overdue
+     FROM loan_portfolio lp
      WHERE disbursement_date BETWEEN '{$sd_esc}' AND '{$ed_esc}'";
-if ($customer_filter) $stats_sql .= " AND customer_id = " . intval($customer_filter);
+if ($customer_filter) $stats_sql .= " AND lp.customer_id = " . intval($customer_filter);
 $stats = $conn->query($stats_sql)->fetch_assoc();
 
 ?>

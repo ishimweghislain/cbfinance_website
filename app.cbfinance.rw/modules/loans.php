@@ -469,7 +469,7 @@ $filtered_loan_count = ($filter_status == 'all') ? $total_all_loans : ($conn->qu
 <!-- Unified Statistics Cards -->
 <div class="row mb-4">
     <!-- Card 1: Total Distributed -->
-    <div class="col-md col-sm-6 mb-3">
+    <div class="col-md col-sm-6 mb-3" title="Total amount disbursed across all loans since inception.">
         <div class="card border-primary h-100 shadow-sm">
             <div class="card-body">
                 <h6 class="card-subtitle mb-2 text-muted text-uppercase small fw-bold">Total Distributed</h6>
@@ -480,7 +480,7 @@ $filtered_loan_count = ($filter_status == 'all') ? $total_all_loans : ($conn->qu
     </div>
 
     <!-- Card 2: Active Principal -->
-    <div class="col-md col-sm-6 mb-3">
+    <div class="col-md col-sm-6 mb-3" title="Remaining principal (capital) to be collected from active and written-off loans.">
         <div class="card border-success h-100 shadow-sm">
             <div class="card-body">
                 <h6 class="card-subtitle mb-2 text-muted text-uppercase small fw-bold">Active Principal</h6>
@@ -491,7 +491,7 @@ $filtered_loan_count = ($filter_status == 'all') ? $total_all_loans : ($conn->qu
     </div>
 
     <!-- Card 3: Active Interest -->
-    <div class="col-md col-sm-6 mb-3">
+    <div class="col-md col-sm-6 mb-3" title="Remaining interest revenue to be collected from the active portfolio.">
         <div class="card border-info h-100 shadow-sm">
             <div class="card-body">
                 <h6 class="card-subtitle mb-2 text-muted text-uppercase small fw-bold">Active Interest</h6>
@@ -502,7 +502,7 @@ $filtered_loan_count = ($filter_status == 'all') ? $total_all_loans : ($conn->qu
     </div>
 
     <!-- Card 4: Portfolio Value (P+I) -->
-    <div class="col-md col-sm-6 mb-3">
+    <div class="col-md col-sm-6 mb-3" title="Total outstanding balance (Principal + Interest) currently in the market.">
         <div class="card border-warning h-100 shadow-sm">
             <div class="card-body">
                 <h6 class="card-subtitle mb-2 text-muted text-uppercase small fw-bold">Portfolio Value (P+I)</h6>
@@ -513,7 +513,7 @@ $filtered_loan_count = ($filter_status == 'all') ? $total_all_loans : ($conn->qu
     </div>
 
     <!-- Card 5: Total Overdue -->
-    <div class="col-md col-sm-6 mb-3">
+    <div class="col-md col-sm-6 mb-3" title="Total amount from instalments whose due dates have already passed and remain unpaid.">
         <div class="card border-danger h-100 shadow-sm">
             <div class="card-body">
                 <h6 class="card-subtitle mb-2 text-muted text-uppercase small fw-bold">Total Overdue</h6>

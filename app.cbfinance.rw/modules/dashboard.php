@@ -286,7 +286,7 @@ try {
     <!-- Unified Portfolio Statistics -->
     <div class="row mb-4">
         <!-- Card 1: Total Distributed -->
-        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;">
+        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;" title="Total amount disbursed across all loans since inception.">
             <div class="card border-left-primary shadow h-100 py-2 stat-card">
                 <div class="card-body">
                     <div class="text-xs fw-bold text-primary text-uppercase mb-1">Total Distributed</div>
@@ -297,7 +297,7 @@ try {
         </div>
 
         <!-- Card 2: Active Principal -->
-        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;">
+        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;" title="Remaining principal (capital) to be collected from active and written-off loans.">
             <div class="card border-left-success shadow h-100 py-2 stat-card">
                 <div class="card-body">
                     <div class="text-xs fw-bold text-success text-uppercase mb-1">Active Principal</div>
@@ -308,7 +308,7 @@ try {
         </div>
 
         <!-- Card 3: Active Interest -->
-        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;">
+        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;" title="Remaining interest revenue to be collected from the active portfolio.">
             <div class="card border-left-info shadow h-100 py-2 stat-card">
                 <div class="card-body">
                     <div class="text-xs fw-bold text-info text-uppercase mb-1">Active Interest</div>
@@ -319,7 +319,7 @@ try {
         </div>
 
         <!-- Card 4: Portfolio Value (P+I) -->
-        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;">
+        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;" title="Total outstanding balance (Principal + Interest) currently in the market.">
             <div class="card border-left-warning shadow h-100 py-2 stat-card">
                 <div class="card-body">
                     <div class="text-xs fw-bold text-warning text-uppercase mb-1">Portfolio Value (P+I)</div>
@@ -330,7 +330,7 @@ try {
         </div>
 
         <!-- Card 5: Total Overdue -->
-        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;">
+        <div class="col-xl-2 col-md-4 mb-4" style="width: 20%;" title="Total amount from instalments whose due dates have already passed and remain unpaid.">
             <div class="card border-left-danger shadow h-100 py-2 stat-card">
                 <div class="card-body">
                     <div class="text-xs fw-bold text-danger text-uppercase mb-1">Total Overdue</div>

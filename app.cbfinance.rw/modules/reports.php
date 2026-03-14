@@ -78,9 +78,9 @@ function buildInstalmentsQuery($conn, $sd, $ed, $cf, $sf) {
     if ($cf) $w[] = "lp.customer_id = " . intval($cf);
 
     if ($sf && $sf !== 'all') {
-        if ($sf === 'paid')        $w[] = "li.payment_date IS NOT NULL";
-        elseif ($sf === 'unpaid')  $w[] = "li.payment_date IS NULL";
-        elseif ($sf === 'overdue') $w[] = "li.payment_date IS NULL AND li.days_overdue > 0";
+        if ($sf === 'paid')        $w[] = "li.balance_remaining <= 0";
+        elseif ($sf === 'unpaid')  $w[] = "li.balance_remaining > 0";
+        elseif ($sf === 'overdue') $w[] = "li.balance_remaining > 0 AND li.due_date < CURDATE()";
     }
     $wc = implode(' AND ', $w);
     return "SELECT li.*, lp.loan_number, c.customer_name, c.customer_code, lp.interest_rate, lp.loan_status
@@ -97,8 +97,10 @@ function buildCustomersQuery($conn, $sd, $ed, $cf) {
     if ($cf) $w[] = "c.customer_id = " . intval($cf);
     $wc = implode(' AND ', $w);
     return "SELECT c.*, COUNT(DISTINCT lp.loan_id) as total_loans,
-        SUM(lp.total_disbursed) as total_disbursed, SUM(lp.total_outstanding) as total_outstanding,
-        SUM(lp.total_paid) as total_paid, MAX(lp.created_at) as last_loan_date
+        SUM(lp.total_disbursed) as total_disbursed, 
+        SUM((SELECT IFNULL(SUM(balance_remaining), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_outstanding,
+        SUM((SELECT IFNULL(SUM(paid_amount), 0) FROM loan_instalments WHERE loan_id = lp.loan_id)) as total_paid, 
+        MAX(lp.created_at) as last_loan_date
         FROM customers c LEFT JOIN loan_portfolio lp ON c.customer_id = lp.customer_id
         WHERE {$wc}
         GROUP BY c.customer_id ORDER BY c.customer_name";
@@ -107,7 +109,7 @@ function buildCustomersQuery($conn, $sd, $ed, $cf) {
 function buildOverdueQuery($conn, $sd, $ed, $cf) {
     $sd = mysqli_real_escape_string($conn, $sd);
     $ed = mysqli_real_escape_string($conn, $ed);
-    $w  = ["li.days_overdue > 0", "li.due_date BETWEEN '{$sd}' AND '{$ed}'"];
+    $w  = ["li.balance_remaining > 0", "li.due_date < CURDATE()", "li.due_date BETWEEN '{$sd}' AND '{$ed}'"];
     if ($cf) $w[] = "lp.customer_id = " . intval($cf);
 
     $wc = implode(' AND ', $w);
@@ -143,8 +145,9 @@ function buildPaymentsQuery($conn, $sd, $ed, $cf) {
 }
 
 function buildProvisionsQuery($conn, $sd, $ed, $cf) {
-    $w = ["li.payment_date IS NULL", "li.days_overdue > 0",
-          "lp.total_outstanding > COALESCE(lp.collateral_net_value, 0)"];
+    // A loan needs provision if any instalment is overdue OR if the loan status is 'Overdue' / 'Written-off'
+    $w = ["(SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND balance_remaining > 0 AND due_date < CURDATE()) > 0",
+          "lp.loan_status IN ('Active', 'Performing', 'Overdue', 'Written-off')"];
     if ($cf) $w[] = "lp.customer_id = " . intval($cf);
     $wc = implode(' AND ', $w);
     return "SELECT lp.loan_id, lp.loan_number, c.customer_name, c.customer_code,
@@ -382,7 +385,11 @@ function formatRows($type, $data) {
 
         case 'instalments':
             foreach ($data as $r) {
-                $status = $r['payment_date'] ? 'Paid' : ($r['days_overdue'] > 0 ? 'Overdue' : 'Pending');
+                $is_overdue = ($r['balance_remaining'] > 0 && strtotime($r['due_date']) < time());
+                $status = $r['balance_remaining'] <= 0 ? 'Paid' : ($is_overdue ? 'Overdue' : 'Pending');
+                
+                // Use live DATEDIFF if overdue
+                $live_days = $is_overdue ? floor((time() - strtotime($r['due_date'])) / 86400) : 0;
                 $rows[] = [
                     $r['loan_number'],
                     $r['customer_name'],
@@ -399,7 +406,7 @@ function formatRows($type, $data) {
                     number_format($r['penalty_paid'] ?? 0, 2),
                     number_format($r['paid_amount'] + ($r['penalty_paid'] ?? 0), 2),
                     number_format($r['balance_remaining'], 2),
-                    ($r['days_overdue'] > 0) ? $r['days_overdue'] : '',
+                    ($live_days > 0) ? $live_days : '',
                     $status,
                 ];
             }
@@ -423,7 +430,7 @@ function formatRows($type, $data) {
                 $rows[] = [
                     $r['loan_number'], $r['customer_name'], $r['instalment_number'],
                     $r['due_date'] ? date('Y-m-d', strtotime($r['due_date'])) : '',
-                    $r['days_overdue'] . ' days',
+                    $r['live_days_overdue'] . ' days',
                     number_format($r['principal_amount'], 2),
                     number_format($r['interest_amount'], 2),
                     number_format($r['management_fee'], 2),

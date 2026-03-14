@@ -360,24 +360,25 @@ p, .form-label, .small {
             
             <!-- Main Content -->
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-wrapper">
-                <?php 
-                // Modify header.php to include user info
-                include 'includes/header.php'; 
-                ?>
+                <?php
+// Modify header.php to include user info
+include 'includes/header.php';
+?>
                 
                 <!-- Page Content -->
                 <div class="container-fluid py-4">
                     <?php
-                    // Route to appropriate module
-                    $page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
-                    $module_file = "modules/{$page}.php";
-                    
-                    if (file_exists($module_file)) {
-                        include $module_file;
-                    } else {
-                        echo '<div class="alert alert-danger">Page not found!</div>';
-                    }
-                    ?>
+// Route to appropriate module
+$page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
+$module_file = "modules/{$page}.php";
+
+if (file_exists($module_file)) {
+    include $module_file;
+}
+else {
+    echo '<div class="alert alert-danger">Page not found!</div>';
+}
+?>
                 </div>
             </main>
         </div>

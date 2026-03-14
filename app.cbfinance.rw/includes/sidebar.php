@@ -7,7 +7,8 @@ require_once __DIR__ . '/approval_helper.php';
 // ── Due-today count for the sidebar badge ──────────────────────────────────
 if (isset($due_today) && is_array($due_today)) {
     $sidebar_due_today_count = count($due_today);
-} else {
+}
+else {
     $sidebar_due_today_count = 0;
     try {
         require_once __DIR__ . '/../config/database.php';
@@ -29,36 +30,102 @@ if (isset($due_today) && is_array($due_today)) {
             }
             $conn_sb->close();
         }
-    } catch (Exception $e) {
-        // Silent fail — never let a sidebar query break the page
+    }
+    catch (Exception $e) {
+    // Silent fail — never let a sidebar query break the page
     }
 }
 
 // ── Role Permissions Check Helpers ──────────────────────────────────────────
-function canSeeAccounting($role) {
+function canSeeAccounting($role)
+{
     return in_array($role, ['Director', 'Accountant']);
 }
-function canSeeBusinessReports($role) {
+function canSeeBusinessReports($role)
+{
     return in_array($role, ['Director', 'MD', 'Accountant']);
 }
-function canSeeLoanManagement($role) {
+function canSeeLoanManagement($role)
+{
     return in_array($role, ['Director', 'MD', 'Secretary']);
 }
-function canSeeReports($role) {
+function canSeeReports($role)
+{
     return in_array($role, ['Director', 'MD']);
 }
 ?>
 <nav id="sidebar" class="col-md-3 col-lg-2 d-md-block bg-primary sidebar">
     <div class="position-sticky pt-3">
         <div class="sidebar-header text-center py-4">
-            <h4 class="text-white">
-                <i class="bi bi-calculator"></i>
-                <span class="ms-2">CB Finance</span>
+            <h4 class="text-white fw-bold">
+                <i class="bi bi-wallet2"></i>
+                <span class="ms-2">CB FINANCE</span>
             </h4>
-            <div class="small text-white-50 mt-1"><?php echo htmlspecialchars($user_role); ?> Portal</div>
         </div>
+
+        <!-- ── Waving Hi Section ── -->
+        <div class="user-greeting text-center">
+            <div class="waving-icon mb-2">👋</div>
+            <div class="text-white small fw-bold mb-1">Hi, <?php echo htmlspecialchars($_SESSION['user_name'] ?? 'User'); ?></div>
+            <div class="badge bg-light text-primary rounded-pill px-3 py-1 mb-2" style="font-size: 0.65rem;">
+                <?php echo htmlspecialchars($user_role); ?>
+            </div>
+            
+            <!-- Typing Animation Container -->
+            <div class="typing-container">
+                <span id="typing-text"></span>
+            </div>
+
+            <div class="mt-1" style="font-size: 0.65rem; color: rgba(255,255,255,0.5);">
+                <i class="bi bi-circle-fill text-success" style="font-size: 0.45rem;"></i> System Active
+            </div>
+        </div>
+
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const textElement = document.getElementById('typing-text');
+            const messages = [
+                "Empowering financial success.",
+                "Excellence in portfolio management.",
+                "Precision in lending decisions.",
+                "Your partner in growth."
+            ];
+            let messageIndex = 0;
+            let charIndex = 0;
+            let isDeleting = false;
+            let typeSpeed = 100;
+
+            function type() {
+                const currentMessage = messages[messageIndex];
+                
+                if (isDeleting) {
+                    textElement.textContent = currentMessage.substring(0, charIndex - 1);
+                    charIndex--;
+                    typeSpeed = 50;
+                } else {
+                    textElement.textContent = currentMessage.substring(0, charIndex + 1);
+                    charIndex++;
+                    typeSpeed = 100;
+                }
+
+                if (!isDeleting && charIndex === currentMessage.length) {
+                    isDeleting = true;
+                    typeSpeed = 2000; // Pause at end
+                } else if (isDeleting && charIndex === 0) {
+                    isDeleting = false;
+                    messageIndex = (messageIndex + 1) % messages.length;
+                    typeSpeed = 500; // Pause before next word
+                }
+
+                setTimeout(type, typeSpeed);
+            }
+
+            type();
+        });
+        </script>
         
-        <ul class="nav flex-column">
+        <div class="px-2">
+            <ul class="nav flex-column">
             <!-- ── Accounting System (Director & Accountant) ── -->
             <?php if (canSeeAccounting($user_role)): ?>
             <li class="nav-item">
@@ -86,7 +153,8 @@ function canSeeReports($role) {
                     <i class="bi bi-safe2 me-2"></i> Assets
                 </a>
             </li>
-            <?php endif; ?>
+            <?php
+endif; ?>
 
             <!-- ── Business Reports (Director, MD, Accountant) ── -->
             <?php if (canSeeBusinessReports($user_role)): ?>
@@ -98,7 +166,8 @@ function canSeeReports($role) {
                     <i class="bi bi-graph-up-arrow me-2"></i> Financial Reports
                 </a>
             </li>
-            <?php endif; ?>
+            <?php
+endif; ?>
 
             <!-- ── Loan Management (Director, MD, Secretary) ── -->
             <?php if (canSeeLoanManagement($user_role)): ?>
@@ -118,19 +187,21 @@ function canSeeReports($role) {
                 </a>
             </li>
             <?php
-            $count_conn = getConnection();
-            $pending_count = 0;
-            if ($count_conn) {
-                $c_res = $count_conn->query("SELECT COUNT(*) as total FROM customers WHERE status = 'Pending' OR status = 'Action Required' OR client_resubmitted = 1");
-                if ($c_res) $pending_count = $c_res->fetch_assoc()['total'];
-            }
-            ?>
+    $count_conn = getConnection();
+    $pending_count = 0;
+    if ($count_conn) {
+        $c_res = $count_conn->query("SELECT COUNT(*) as total FROM customers WHERE status = 'Pending' OR status = 'Action Required' OR client_resubmitted = 1");
+        if ($c_res)
+            $pending_count = $c_res->fetch_assoc()['total'];
+    }
+?>
             <li class="nav-item">
                 <a class="nav-link <?php echo $current_page == 'pending_customers' ? 'active' : ''; ?>" href="?page=pending_customers">
                     <i class="bi bi-clock-history me-2"></i> Requested Loans
-                    <?php if($pending_count > 0): ?>
+                    <?php if ($pending_count > 0): ?>
                         <span class="badge bg-danger rounded-pill float-end"><?php echo $pending_count; ?></span>
-                    <?php endif; ?>
+                    <?php
+    endif; ?>
                 </a>
             </li>
             <li class="nav-item">
@@ -150,10 +221,12 @@ function canSeeReports($role) {
                         <span class="badge rounded-pill bg-danger" style="font-size:.68rem;min-width:20px;padding:3px 7px;">
                             <?php echo $sidebar_due_today_count; ?>
                         </span>
-                    <?php endif; ?>
+                    <?php
+    endif; ?>
                 </a>
             </li>
-            <?php endif; ?>
+            <?php
+endif; ?>
 
             <!-- ── Reports (Director, MD) ── -->
             <?php if (canSeeReports($user_role)): ?>
@@ -165,14 +238,16 @@ function canSeeReports($role) {
                     <i class="bi bi-file-earmark-bar-graph me-2"></i> Export Reports
                 </a>
             </li>
-            <?php endif; ?>
+            <?php
+endif; ?>
             
             <!-- ── Approvals (Hide for Developer) ── -->
-            <?php if (strtolower($user_role) !== 'developer'): 
-                $approval_conn = getConnection();
-                $pending_approvals_count = $approval_conn ? countPendingApprovals($approval_conn) : 0;
-                if ($approval_conn) $approval_conn->close();
-                ?>
+            <?php if (strtolower($user_role) !== 'developer'):
+    $approval_conn = getConnection();
+    $pending_approvals_count = $approval_conn ? countPendingApprovals($approval_conn) : 0;
+    if ($approval_conn)
+        $approval_conn->close();
+?>
                 <li class="nav-item">
                     <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-white-50">
                         <span>Approvals</span>
@@ -183,10 +258,12 @@ function canSeeReports($role) {
                             <span class="badge rounded-pill bg-warning text-dark" style="font-size:.68rem;min-width:20px;padding:3px 7px;">
                                 <?php echo $pending_approvals_count; ?>
                             </span>
-                        <?php endif; ?>
+                        <?php
+    endif; ?>
                     </a>
                 </li>
-            <?php endif; ?>
+            <?php
+endif; ?>
 
             <?php if ($user_role === 'Developer'): ?>
             <li class="nav-item mt-3">
@@ -206,8 +283,11 @@ function canSeeReports($role) {
             </li>
             <?php endif; ?>
 
-            <li class="nav-item mt-auto pt-4">
-                <a class="nav-link text-danger" href="logout.php">
+            <!-- ── SEPARATE RED LOGOUT BUTTON ── -->
+            <li class="nav-item mt-5 mb-4 px-3">
+                <a class="nav-link bg-danger text-white rounded-3 shadow d-flex align-items-center justify-content-center fw-bold border-0" 
+                   href="logout.php" 
+                   style="background-color: #dc3545 !important; color: white !important; padding: 12px !important;">
                     <i class="bi bi-box-arrow-right me-2"></i> Logout
                 </a>
             </li>

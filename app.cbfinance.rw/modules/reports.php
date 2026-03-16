@@ -287,7 +287,7 @@ function getHeaders($type) {
                     'Total Loans', 'Total Disbursed', 'Total Outstanding', 'Total Paid', 'Last Loan Date'];
         case 'overdue':
             return ['Loan Number', 'Customer Name', 'Instalment #', 'Due Date', 'Days Overdue',
-                    'Principal', 'Interest', 'Mgmt Fee', 'Total Due', 'Balance Remaining', 'Provision Category'];
+                    'Principal', 'Interest', 'Mgmt Fee', 'Mgmt Fee Paid', 'Unpaid Mgmt Fee', 'Total Due', 'Balance Remaining', 'Provision Category'];
         case 'payments':
             return ['Loan Number', 'Customer Name', 'Instalment #', 'Due Date', 'Payment Date',
                     'Principal Paid', 'Interest Paid', 'Mgmt Fee Paid', 'Penalty Paid', 'Total Collected', 'Balance Remaining'];
@@ -426,11 +426,16 @@ function formatRows($type, $data) {
             break;
 
         case 'overdue':
-            $tp = $ti = $tm = $tt = $tb = 0;
+            $tp = $ti = $tm = $tm_p = $tm_u = $tt = $tb = 0;
             foreach ($data as $r) {
                 $tp += $r['principal_amount'];
                 $ti += $r['interest_amount'];
                 $tm += $r['management_fee'];
+                $m_paid = $r['management_fee_paid'] ?? 0;
+                $m_unpaid = $r['management_fee'] - $m_paid;
+                $tm_p += $m_paid;
+                $tm_u += $m_unpaid;
+                
                 $tt += $r['total_payment'];
                 $tb += $r['balance_remaining'];
                 
@@ -441,19 +446,23 @@ function formatRows($type, $data) {
                     number_format($r['principal_amount'], 2),
                     number_format($r['interest_amount'], 2),
                     number_format($r['management_fee'], 2),
+                    number_format($m_paid, 2),
+                    number_format($m_unpaid, 2),
                     number_format($r['total_payment'], 2),
                     number_format($r['balance_remaining'], 2),
                     $r['provision_category'],
                 ];
             }
             if (!empty($data)) {
-                $totals = array_fill(0, 11, '');
+                $totals = array_fill(0, 13, '');
                 $totals[0] = "TOTAL OVERDUE (" . count($data) . " instalments)";
                 $totals[5] = number_format($tp, 2);
                 $totals[6] = number_format($ti, 2);
                 $totals[7] = number_format($tm, 2);
-                $totals[8] = number_format($tt, 2);
-                $totals[9] = number_format($tb, 2);
+                $totals[8] = number_format($tm_p, 2);
+                $totals[9] = number_format($tm_u, 2);
+                $totals[10] = number_format($tt, 2);
+                $totals[11] = number_format($tb, 2);
             }
             break;
 

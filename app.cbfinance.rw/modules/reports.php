@@ -426,7 +426,14 @@ function formatRows($type, $data) {
             break;
 
         case 'overdue':
+            $tp = $ti = $tm = $tt = $tb = 0;
             foreach ($data as $r) {
+                $tp += $r['principal_amount'];
+                $ti += $r['interest_amount'];
+                $tm += $r['management_fee'];
+                $tt += $r['total_payment'];
+                $tb += $r['balance_remaining'];
+                
                 $rows[] = [
                     $r['loan_number'], $r['customer_name'], $r['instalment_number'],
                     $r['due_date'] ? date('Y-m-d', strtotime($r['due_date'])) : '',
@@ -438,6 +445,15 @@ function formatRows($type, $data) {
                     number_format($r['balance_remaining'], 2),
                     $r['provision_category'],
                 ];
+            }
+            if (!empty($data)) {
+                $totals = array_fill(0, 11, '');
+                $totals[0] = "TOTAL OVERDUE (" . count($data) . " instalments)";
+                $totals[5] = number_format($tp, 2);
+                $totals[6] = number_format($ti, 2);
+                $totals[7] = number_format($tm, 2);
+                $totals[8] = number_format($tt, 2);
+                $totals[9] = number_format($tb, 2);
             }
             break;
 

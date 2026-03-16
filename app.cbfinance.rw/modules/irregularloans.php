@@ -624,7 +624,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 
                                 // Calculate amounts WITHOUT FEES
                                 $disbursement_fees_calc = 0;
-                                $disbursement_vat_calc = 0; // VAT removed
+                                $disbursement_vat_calc = 0;
                                 $total_disbursed = $disbursement_amount;
                                 $principal_outstanding = $disbursement_amount;
                                 
@@ -677,7 +677,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 $accrued_monitoring_fees = 0.0;
                                 $accrued_monitoring_fees_vat = 0.0;
                                 $deferred_disbursement_fees = 0;
-                                $deferred_disbursement_fees_vat = 0; // VAT REMOVED
+                                $deferred_disbursement_fees_vat = 0;
                                 $accumulated_loan_amount = $total_disbursed;
                                 $created_by = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : 1;
                                 $total_days_overdue = 0;

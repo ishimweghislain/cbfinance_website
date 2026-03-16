@@ -153,6 +153,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
             'name' => 'Monitoring Fee Income',
             'class' => 'Fee Income',
             'normal_balance' => 'Credit'
+        ],
+        'vat_payable' => [
+            'code' => '2105',
+            'name' => 'VAT Payable',
+            'class' => 'Liability',
+            'normal_balance' => 'Credit'
         ]
     ];
     
@@ -160,11 +166,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
     $breakdown = $transaction_data['breakdown'];
     $principal = roundAmount($breakdown['principal']);
     $interest = roundAmount($breakdown['interest']);
-    $net_monitoring_fee = roundAmount($breakdown['monitoring_fee']);
+    $total_monitoring_fee = roundAmount($breakdown['monitoring_fee']);
+    $net_monitoring_fee = roundAmount($total_monitoring_fee / 1.18);
+    $vat_amount = roundAmount($total_monitoring_fee - $net_monitoring_fee);
     $total_payment = roundAmount($breakdown['total_payment']);
     
     // Verify rounded amounts still balance
-    $rounded_total = roundAmount($principal + $interest + $net_monitoring_fee);
+    $rounded_total = roundAmount($principal + $interest + $net_monitoring_fee + $vat_amount);
     if (abs($total_payment - $rounded_total) > 0.01) {
         // Adjust principal if rounding causes imbalance
         $principal = roundAmount($principal + ($total_payment - $rounded_total));
@@ -390,11 +398,61 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
             $affected_accounts[] = $accounts['monitoring_fee']['code'];
         }
         
-        // 5. [VAT ENTRY REMOVED]
+        // 5. CREDIT: VAT Payable (Cr) - VAT portion of monitoring fee
+        if ($vat_amount > 0) {
+            $beginning_balance5 = calculateBeginningBalance($conn, $accounts['vat_payable']['code'], $transaction_data['transaction_date']);
+            $movement5 = roundAmount(-$vat_amount); // Increase in liability (credit)
+            $ending_balance5 = roundAmount($beginning_balance5 + $movement5);
+            
+            $sql5 = "INSERT INTO ledger (
+                        transaction_date, 
+                        class, 
+                        account_code, 
+                        account_name, 
+                        particular,
+                        voucher_number, 
+                        narration, 
+                        beginning_balance, 
+                        debit_amount, 
+                        credit_amount, 
+                        movement, 
+                        ending_balance, 
+                        created_by, 
+                        created_at
+                    ) VALUES (
+                        '" . mysqli_real_escape_string($conn, $transaction_data['transaction_date']) . "',
+                        '" . mysqli_real_escape_string($conn, $accounts['vat_payable']['class']) . "',
+                        '" . mysqli_real_escape_string($conn, $accounts['vat_payable']['code']) . "',
+                        '" . mysqli_real_escape_string($conn, $accounts['vat_payable']['name']) . "',
+                        '" . mysqli_real_escape_string($conn, $narration) . "',
+                        '" . mysqli_real_escape_string($conn, $voucher_number) . "',
+                        '" . mysqli_real_escape_string($conn, $narration) . "',
+                        " . floatval($beginning_balance5) . ",
+                        0,
+                        " . floatval($vat_amount) . ",
+                        " . floatval($movement5) . ",
+                        " . floatval($ending_balance5) . ",
+                        " . intval($user_id) . ",
+                        '" . $timestamp . "'
+                    )";
+            
+            if (!mysqli_query($conn, $sql5)) {
+                throw new Exception("Failed to create VAT entry: " . mysqli_error($conn));
+            }
+            $created_entries[] = [
+                'account' => $accounts['vat_payable']['code'] . ' - ' . $accounts['vat_payable']['name'],
+                'debit' => 0,
+                'credit' => $vat_amount,
+                'beginning' => $beginning_balance5,
+                'movement' => $movement5,
+                'ending' => $ending_balance5
+            ];
+            $affected_accounts[] = $accounts['vat_payable']['code'];
+        }
         
         // Verify double-entry accounting: Debits must equal Credits
         $total_debits = $total_payment;
-        $total_credits = roundAmount($principal + $interest + $net_monitoring_fee);
+        $total_credits = roundAmount($principal + $interest + $net_monitoring_fee + $vat_amount);
         
         if (abs($total_debits - $total_credits) > 0.01) {
             throw new Exception("Accounting equation not balanced! Debits: " . $total_debits . " ≠ Credits: " . $total_credits);

@@ -31,8 +31,7 @@ try {
     $processed = 0;
     
     while ($installment = $result->fetch_assoc()) {
-        // VAT removed as per user request
-        $vat_amount = 0;
+        $vat_amount = $installment['monitoring_fee'] * 0.18;
         $journal_entry = 'JE-' . date('Ymd-His') . '-' . $installment['id'];
         
         $conn->begin_transaction();
@@ -62,8 +61,10 @@ try {
             $entries = [
                 ['1203', 'Interest Receivable', $installment['interest_amount'], 0],
                 ['1204', 'Monitoring Fees Receivable', $installment['monitoring_fee'], 0],
+                ['1206', 'VAT Receivable', $vat_amount, 0],
                 ['4101', 'Interest on Loans – Income', 0, $installment['interest_amount']],
-                ['4202', 'Monitoring Fee Income', 0, $installment['monitoring_fee']]
+                ['4202', 'Monitoring Fee Income', 0, $installment['monitoring_fee']],
+                ['2105', 'VAT Payable', 0, $vat_amount]
             ];
             
             $ledger_sql = "

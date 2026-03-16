@@ -411,10 +411,12 @@ if ($total_exp_inst == 0 && $instalment_amount > 0 && $number_of_instalments > 0
 
 $application_fees      = floatval(isset($loan['application_fees'])      ? $loan['application_fees']      : 0);
 $disbursement_fees     = floatval(isset($loan['disbursement_fees'])     ? $loan['disbursement_fees']     : 0);
+$disbursement_fees_vat = floatval(isset($loan['disbursement_fees_vat']) ? $loan['disbursement_fees_vat'] : 0);
 $monitoring_fees       = floatval(isset($loan['monitoring_fees'])       ? $loan['monitoring_fees']       : 0);
+$monitoring_fees_vat   = floatval(isset($loan['monitoring_fees_vat'])   ? $loan['monitoring_fees_vat']   : 0);
 $penalties             = floatval(isset($loan['penalties'])             ? $loan['penalties']             : 0);
-$total_fees = $application_fees + $disbursement_fees
-            + $monitoring_fees  + $penalties;
+$total_fees = $application_fees + $disbursement_fees + $disbursement_fees_vat
+            + $monitoring_fees  + $monitoring_fees_vat + $penalties;
 
 $loan_status  = isset($loan['loan_status']) ? $loan['loan_status'] : 'Unknown';
 $status_color = loanStatusColor($loan_status);

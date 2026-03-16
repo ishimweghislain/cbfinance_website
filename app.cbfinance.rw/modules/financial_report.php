@@ -45,6 +45,12 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
         $class = $account['class'];
         $normal_balance = $account['normal_balance'];
         
+        // Filter out specifically "Deferred VAT" accounts as requested
+        if ($account_code === '2403' || $account_code === '2406' || 
+            stripos($account_name, 'Deferred VAT') !== false) {
+            continue;
+        }
+        
         // ==========================================
         // STEP 1: Get OPENING BALANCE (before start_date)
         // ==========================================

@@ -29,7 +29,7 @@ function createNewLoan($conn, $data) {
             $data['interest_rate'], $data['disbursement_date'], $data['maturity_date'],
             $data['number_of_instalments'], $instalment, $data['application_fees'],
             $data['disbursement_fees'], $data['disbursement_fees_vat'], 
-            $data['monitoring_fees'], 0, $data['penalty_rate'],
+            $data['monitoring_fees'], $data['monitoring_fees_vat'], $data['penalty_rate'],
             $data['collateral_type_id'], $data['collateral_value'], 
             $data['collateral_description'], $data['collateral_location'],
             $data['collateral_ref_number'], $data['collateral_bnr_rate'],
@@ -60,8 +60,8 @@ function createNewLoan($conn, $data) {
 
 function createDisbursementJournalEntries($conn, $loan_id, $data) {
     // 1. Application Fees Entry
-    $appFeeNet = $data['application_fees'];
-    $appFeeVAT = 0;
+    $appFeeNet = $data['application_fees'] / 1.18;
+    $appFeeVAT = $data['application_fees'] - $appFeeNet;
     
     createJournalEntry($conn, [
         'journal_number' => 'J-' . date('Ymd') . '-' . str_pad($loan_id, 4, '0', STR_PAD_LEFT) . '-1',
@@ -71,7 +71,8 @@ function createDisbursementJournalEntries($conn, $loan_id, $data) {
         'reference_type' => 'loan',
         'entries' => [
             ['account_code' => '1101', 'debit' => $data['application_fees'], 'credit' => 0, 'description' => 'Bank/Cash'],
-            ['account_code' => '4204', 'debit' => 0, 'credit' => $appFeeNet, 'description' => 'Application Fee Income']
+            ['account_code' => '4204', 'debit' => 0, 'credit' => $appFeeNet, 'description' => 'Application Fee Income'],
+            ['account_code' => '2105', 'debit' => 0, 'credit' => $appFeeVAT, 'description' => 'VAT Payable']
         ]
     ]);
     
@@ -85,8 +86,10 @@ function createDisbursementJournalEntries($conn, $loan_id, $data) {
         'entries' => [
             ['account_code' => '1201', 'debit' => $data['disbursement_amount'], 'credit' => 0, 'description' => 'Loan to Customers'],
             ['account_code' => '1201', 'debit' => $data['disbursement_fees'], 'credit' => 0, 'description' => 'Deferred Disbursement Fees'],
+            ['account_code' => '1201', 'debit' => $data['disbursement_fees_vat'], 'credit' => 0, 'description' => 'Disbursement VAT Portion'],
             ['account_code' => $data['bank_account_id'], 'debit' => 0, 'credit' => $data['disbursement_amount'], 'description' => 'Bank Account'],
-            ['account_code' => '2401', 'debit' => 0, 'credit' => $data['disbursement_fees'], 'description' => 'Deferred Disbursement Fees Liability']
+            ['account_code' => '2401', 'debit' => 0, 'credit' => $data['disbursement_fees'], 'description' => 'Deferred Disbursement Fees Liability'],
+            ['account_code' => '2105', 'debit' => 0, 'credit' => $data['disbursement_fees_vat'], 'description' => 'VAT Payable (Disbursement)']
         ]
     ]);
 }
@@ -106,7 +109,7 @@ function createInitialAccruals($conn, $loan_id, $data) {
         $monthly_monitoring = $data['monitoring_fees'];
         $daily_monitoring = $monthly_monitoring / $days_in_month;
         $monitoring_accrual = $daily_monitoring * $days_remaining;
-        $monitoring_vat_accrual = 0;
+        $monitoring_vat_accrual = $monitoring_accrual * 18 / 118;
         
         // Insert accruals
         $stmt = $conn->prepare("
@@ -140,8 +143,10 @@ function createInitialAccruals($conn, $loan_id, $data) {
             'entries' => [
                 ['account_code' => '1203', 'debit' => $interest_accrual, 'credit' => 0, 'description' => 'Interest Receivable'],
                 ['account_code' => '1204', 'debit' => $monitoring_accrual, 'credit' => 0, 'description' => 'Monitoring Fees Receivable'],
+                ['account_code' => '1206', 'debit' => $monitoring_vat_accrual, 'credit' => 0, 'description' => 'VAT Receivable'],
                 ['account_code' => '4101', 'debit' => 0, 'credit' => $interest_accrual, 'description' => 'Interest Income'],
-                ['account_code' => '4202', 'debit' => 0, 'credit' => $monitoring_accrual, 'description' => 'Monitoring Fee Income']
+                ['account_code' => '4202', 'debit' => 0, 'credit' => $monitoring_accrual, 'description' => 'Monitoring Fee Income'],
+                ['account_code' => '2105', 'debit' => 0, 'credit' => $monitoring_vat_accrual, 'description' => 'VAT Payable']
             ]
         ]);
     }
@@ -150,7 +155,8 @@ function createInitialAccruals($conn, $loan_id, $data) {
 function calculateTotalLoanAmount($data) {
     return $data['disbursement_amount'] + 
            $data['application_fees'] + 
-           $data['disbursement_fees'];
+           $data['disbursement_fees'] + 
+           $data['disbursement_fees_vat'];
 }
 
 function calculateInstalmentAmount($data) {

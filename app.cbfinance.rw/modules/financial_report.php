@@ -48,8 +48,26 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
         error_log("Error fetching accounts: " . mysqli_error($conn));
         return [];
     }
-    
+
+    $all_accounts = [];
     while ($account = mysqli_fetch_assoc($accounts_result)) {
+        $all_accounts[] = $account;
+    }
+
+    // Ensure Disbursement Fee account (4202) exists in our working list
+    $has_4202 = false;
+    foreach ($all_accounts as $acc) { if ($acc['account_code'] === '4202') $has_4202 = true; }
+    if (!$has_4202) {
+        $all_accounts[] = [
+            'account_code' => '4202',
+            'account_name' => 'Disbursement Management Fee Income',
+            'class' => 'Fee Income',
+            'normal_balance' => 'Credit',
+            'is_active' => 1
+        ];
+    }
+    
+    foreach ($all_accounts as $account) {
         $account_code = mysqli_real_escape_string($conn, $account['account_code']);
         $account_name = $account['account_name'];
         $class = $account['class'];
@@ -64,35 +82,55 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
         // ==========================================
         // CUSTOM LOGIC: Paid-Basis Income Correction for Accounts 4101, 4201, 4202, 4205
         // Users want these accounts to reflect ACTUAL PAYMENTS (from loan_instalments)
-        // NOT what is in the ledger (which might contain accruals).
+        // EXCEPT Account 4202 which comes from loan_portfolio (Disbursement Fee)
         // ==========================================
-        if (in_array($account_code, ['4101', '4201', '4202', '4205'])) {
+        if (in_array($account_code, ['4101', '4201', '4202', '4205', '4301'])) {
             
-            // 1. Initial Balance (Opening)
-            $col_paid = '';
-            if ($account_code === '4101') $col_paid = 'interest_paid';
-            elseif ($account_code === '4201') $col_paid = 'management_fee_paid';
-            elseif ($account_code === '4205') $col_paid = 'penalty_paid';
-            
-            if ($col_paid) {
-                $res_open = mysqli_query($conn, "SELECT SUM($col_paid) as op FROM loan_instalments WHERE payment_date < '$start_date'");
-                $row_open = mysqli_fetch_assoc($res_open);
-                $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
+            $initial_balance = 0;
+            $period_debit = 0;
+            $period_credit = 0;
+
+            if ($account_code === '4202') {
+                // Disbursement Fee (One-time, upfront) from loan_portfolio
+                $res_open = mysqli_query($conn, "SELECT SUM(management_fee_amount) as op FROM loan_portfolio WHERE disbursement_date < '$start_date'");
+                if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
+                    $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
+                }
                 
-                $res_move = mysqli_query($conn, "SELECT SUM($col_paid) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date' AND '$query_end_date'");
-                $row_move = mysqli_fetch_assoc($res_move);
-                $period_debit = 0;
-                $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
+                $res_move = mysqli_query($conn, "SELECT SUM(management_fee_amount) as mp FROM loan_portfolio WHERE disbursement_date BETWEEN '$start_date' AND '$query_end_date'");
+                if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
+                    $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
+                }
             } else {
-                // For 4202 (Disbursement Fee), we take directly from ledger because it's not in installments
-                $res_open = mysqli_query($conn, "SELECT SUM(credit_amount - debit_amount) as op FROM ledger WHERE account_code = '$account_code' AND transaction_date < '$start_date'");
-                $row_open = mysqli_fetch_assoc($res_open);
-                $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
+                // Accounts from loan_instalments (Interest 4101, Periodic Mgmt Fee 4201, Penalties 4205)
+                $col_paid = '';
+                if ($account_code === '4101') $col_paid = 'interest_paid';
+                elseif ($account_code === '4201') $col_paid = 'management_fee_paid';
+                elseif ($account_code === '4205') $col_paid = 'penalty_paid';
                 
-                $res_move = mysqli_query($conn, "SELECT SUM(debit_amount) as d, SUM(credit_amount) as c FROM ledger WHERE account_code = '$account_code' AND transaction_date BETWEEN '$start_date' AND '$query_end_date'");
-                $row_move = mysqli_fetch_assoc($res_move);
-                $period_debit = roundAmount(floatval($row_move['d'] ?? 0));
-                $period_credit = roundAmount(floatval($row_move['c'] ?? 0));
+                if ($col_paid) {
+                    $res_open = mysqli_query($conn, "SELECT SUM($col_paid) as op FROM loan_instalments WHERE payment_date < '$start_date'");
+                    if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
+                        $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
+                    }
+                    
+                    $res_move = mysqli_query($conn, "SELECT SUM($col_paid) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date' AND '$query_end_date'");
+                    if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
+                        $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
+                    }
+                } else {
+                    // For 4301 or others not explicitly mapped to installments, fallback to ledger
+                    $res_open = mysqli_query($conn, "SELECT SUM(credit_amount - debit_amount) as op FROM ledger WHERE account_code = '$account_code' AND transaction_date < '$start_date'");
+                    if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
+                        $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
+                    }
+                    
+                    $res_move = mysqli_query($conn, "SELECT SUM(debit_amount) as d, SUM(credit_amount) as c FROM ledger WHERE account_code = '$account_code' AND transaction_date BETWEEN '$start_date' AND '$query_end_date'");
+                    if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
+                        $period_debit = roundAmount(floatval($row_move['d'] ?? 0));
+                        $period_credit = roundAmount(floatval($row_move['c'] ?? 0));
+                    }
+                }
             }
             
             $closing_balance = $initial_balance + $period_debit - $period_credit;
@@ -394,6 +432,61 @@ switch ($report_type) {
     case 'income_statement':
         $report_title = "Income Statement";
         
+        // Fetch detailed customer breakdown for revenue accounts (4101, 4201, 4202, 4204, 4205)
+        $customer_breakdown = [
+            '4101' => [], '4201' => [], '4202' => [], '4204' => [], '4205' => []
+        ];
+
+        // 1. Interest, Mgmt fees, Penalties from installments
+        $sql_det = "SELECT c.customer_name, lp.loan_number,
+                    SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.interest_paid ELSE 0 END) as int_paid,
+                    (SUM(li.interest_amount) - SUM(li.interest_paid)) as int_rem,
+                    SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.management_fee_paid ELSE 0 END) as mgmt_paid,
+                    (SUM(li.management_fee) - SUM(li.management_fee_paid)) as mgmt_rem,
+                    SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.penalty_paid ELSE 0 END) as pen_paid,
+                    (SUM(li.penalty_amount) - SUM(li.penalty_paid)) as pen_rem
+                    FROM loan_portfolio lp
+                    JOIN customers c ON lp.customer_id = c.customer_id
+                    JOIN loan_instalments li ON lp.loan_id = li.loan_id
+                    GROUP BY lp.loan_id HAVING (int_paid > 0 OR mgmt_paid > 0 OR pen_paid > 0)
+                    ORDER BY c.customer_name";
+        $res_det = mysqli_query($conn, $sql_det);
+        if ($res_det) {
+            while ($r = mysqli_fetch_assoc($res_det)) {
+                if ($r['int_paid'] > 0) $customer_breakdown['4101'][] = ['name' => $r['customer_name'], 'paid' => $r['int_paid'], 'rem' => $r['int_rem']];
+                if ($r['mgmt_paid'] > 0) $customer_breakdown['4201'][] = ['name' => $r['customer_name'], 'paid' => $r['mgmt_paid'], 'rem' => $r['mgmt_rem']];
+                if ($r['pen_paid'] > 0) $customer_breakdown['4205'][] = ['name' => $r['customer_name'], 'paid' => $r['pen_paid'], 'rem' => $r['pen_rem']];
+            }
+        }
+
+        // 2. Disbursement Fees from loan_portfolio
+        $sql_disb = "SELECT c.customer_name, lp.management_fee_amount as paid
+                     FROM loan_portfolio lp
+                     JOIN customers c ON lp.customer_id = c.customer_id
+                     WHERE lp.disbursement_date BETWEEN '$start_date' AND '$query_end_date'
+                     AND lp.management_fee_amount > 0
+                     ORDER BY c.customer_name";
+        $res_disb = mysqli_query($conn, $sql_disb);
+        if ($res_disb) {
+            while ($r = mysqli_fetch_assoc($res_disb)) {
+                $customer_breakdown['4202'][] = ['name' => $r['customer_name'], 'paid' => $r['paid'], 'rem' => 0];
+            }
+        }
+
+        // 3. Application Fees from application_fees table
+        $sql_app = "SELECT c.customer_name, SUM(amount) as paid
+                    FROM application_fees af
+                    JOIN customers c ON af.customer_id = c.customer_id
+                    WHERE af.status = 'Paid' AND af.transaction_date BETWEEN '$start_date' AND '$query_end_date'
+                    GROUP BY c.customer_id
+                    ORDER BY c.customer_name";
+        $res_app = mysqli_query($conn, $sql_app);
+        if ($res_app) {
+            while ($r = mysqli_fetch_assoc($res_app)) {
+                $customer_breakdown['4204'][] = ['name' => $r['customer_name'], 'paid' => $r['paid'], 'rem' => 0];
+            }
+        }
+
         // Income Statement: Revenue (4), Expenses (5, 6)
         foreach ($trial_data as &$account) {
             $first_digit = substr($account['account_code'], 0, 1);
@@ -1342,6 +1435,32 @@ switch ($report_type) {
                                         </div>
                                         <span class="acct-amount rev-amt"><?php echo formatMoney($display); ?></span>
                                     </div>
+                                    
+                                    <?php 
+                                    // Customer breakdown for specific revenue accounts (Interest, Mgmt Fees, etc.)
+                                    $code = $row['account_code'];
+                                    if (isset($customer_breakdown[$code]) && !empty($customer_breakdown[$code])): ?>
+                                        <div class="customer-breakdown ms-4 mb-2 small text-muted bg-light p-2 rounded shadow-sm border">
+                                            <table class="table table-borderless table-sm mb-0" style="font-size: 0.72rem; width: 100%;">
+                                                <thead class="border-bottom">
+                                                    <tr>
+                                                        <th>Paid By (Customer)</th>
+                                                        <th class="text-end">Paid Period</th>
+                                                        <th class="text-end">Balance Left</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php foreach ($customer_breakdown[$code] as $cust): ?>
+                                                    <tr>
+                                                        <td><i class="fas fa-user-circle me-1 opacity-50"></i><?php echo htmlspecialchars($cust['name']); ?></td>
+                                                        <td class="text-end fw-bold"><?php echo formatMoney($cust['paid']); ?></td>
+                                                        <td class="text-end text-danger"><?php echo $cust['rem'] > 0 ? formatMoney($cust['rem']) : '-'; ?></td>
+                                                    </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    <?php endif; ?>
                                     <?php endforeach; ?>
                                     <div class="is-class-total rev-class-total">
                                         <span><?php echo htmlspecialchars($class_name); ?> Total</span>

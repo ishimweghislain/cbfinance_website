@@ -11,6 +11,14 @@ $report_type = isset($_GET['type']) ? $_GET['type'] : 'trial_balance';
 // Handle date range filters
 $start_date = !empty($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-01');
 $end_date = !empty($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d');
+
+// Validate/Swap date range BEFORE any calculations
+if (strtotime($start_date) > strtotime($end_date)) {
+    $temp = $start_date;
+    $start_date = $end_date;
+    $end_date = $temp;
+}
+
 $query_end_date = $end_date . ' 23:59:59';
 
 // Helper functions
@@ -54,53 +62,103 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
         }
         
         // ==========================================
-        // STEP 1: Get OPENING BALANCE (before start_date)
+        // CUSTOM LOGIC: Paid-Basis Income Correction for Accounts 4101 and 4201
+        // Users want these accounts to reflect ACTUAL PAYMENTS (from loan_instalments)
+        // NOT what is in the ledger (which might contain accruals).
         // ==========================================
-        $opening_sql = "SELECT 
-                        SUM(debit_amount) as total_debit,
-                        SUM(credit_amount) as total_credit
-                        FROM ledger 
-                        WHERE account_code = '$account_code' 
-                        AND transaction_date < '$start_date'";
-        $opening_result = mysqli_query($conn, $opening_sql);
-        
-        $opening_debit = 0;
-        $opening_credit = 0;
-        if ($opening_result && mysqli_num_rows($opening_result) > 0) {
-            $row = mysqli_fetch_assoc($opening_result);
-            $opening_debit = roundAmount(floatval($row['total_debit'] ?? 0));
-            $opening_credit = roundAmount(floatval($row['total_credit'] ?? 0));
+        if ($account_code === '4101' || $account_code === '4201') {
+            
+            // 1. Initial Balance (Opening) - Sum of payments BEFORE start date
+            $col_paid = ($account_code === '4101') ? 'interest_paid' : 'management_fee_paid';
+            
+            $open_income_sql = "SELECT SUM($col_paid) as total_paid FROM loan_instalments WHERE payment_date < '$start_date'";
+            $res_open = mysqli_query($conn, $open_income_sql);
+            $row_open = mysqli_fetch_assoc($res_open);
+            // Income is Credit, so we represent initial balance as -amount (using ledger convention)
+            // Wait, this report uses debit-credit = balance. So Credit balance is Negative.
+            $initial_balance = -roundAmount(floatval($row_open['total_paid'] ?? 0));
+            
+            // 2. Period Movements - Sum of payments DURING period
+            $move_income_sql = "SELECT SUM($col_paid) as period_paid FROM loan_instalments WHERE payment_date BETWEEN '$start_date' AND '$query_end_date'";
+            $res_move = mysqli_query($conn, $move_income_sql);
+            $row_move = mysqli_fetch_assoc($res_move);
+            
+            $period_debit = 0;
+            $period_credit = roundAmount(floatval($row_move['period_paid'] ?? 0));
+            
+            // For 4201, we also need to include Disbursement Fees taken at the start (not in installments)
+            // These would be ledger entries without a reference_type = 'loan_payment' or 'loan_prepayment'
+            // OR simply any 4201 entry whose narration contains 'Disbursement' and NOT in installments
+            if ($account_code === '4201') {
+                $extra_move_sql = "SELECT SUM(credit_amount) as extra_credit FROM ledger 
+                                   WHERE account_code = '4201' 
+                                   AND reference_type NOT IN ('loan_payment', 'loan_prepayment')
+                                   AND transaction_date BETWEEN '$start_date' AND '$query_end_date'";
+                $res_extra = mysqli_query($conn, $extra_move_sql);
+                $row_extra = mysqli_fetch_assoc($res_extra);
+                $period_credit += roundAmount(floatval($row_extra['extra_credit'] ?? 0));
+                
+                $extra_open_sql = "SELECT SUM(credit_amount) as extra_credit FROM ledger 
+                                   WHERE account_code = '4201' 
+                                   AND reference_type NOT IN ('loan_payment', 'loan_prepayment')
+                                   AND transaction_date < '$start_date'";
+                $res_extra_open = mysqli_query($conn, $extra_open_sql);
+                $row_extra_open = mysqli_fetch_assoc($res_extra_open);
+                $initial_balance -= roundAmount(floatval($row_extra_open['extra_credit'] ?? 0));
+            }
+            
+            $closing_balance = $initial_balance + $period_debit - $period_credit;
+            
+        } else {
+            // ==========================================
+            // STEP 1: Get OPENING BALANCE (before start_date)
+            // ==========================================
+            $opening_sql = "SELECT 
+                            SUM(debit_amount) as total_debit,
+                            SUM(credit_amount) as total_credit
+                            FROM ledger 
+                            WHERE account_code = '$account_code' 
+                            AND transaction_date < '$start_date'";
+            $opening_result = mysqli_query($conn, $opening_sql);
+            
+            $opening_debit = 0;
+            $opening_credit = 0;
+            if ($opening_result && mysqli_num_rows($opening_result) > 0) {
+                $row = mysqli_fetch_assoc($opening_result);
+                $opening_debit = roundAmount(floatval($row['total_debit'] ?? 0));
+                $opening_credit = roundAmount(floatval($row['total_credit'] ?? 0));
+            }
+            
+            // Calculate initial balance (opening balance)
+            $initial_balance = $opening_debit - $opening_credit;
+            $initial_balance = roundAmount($initial_balance);
+            
+            // ==========================================
+            // STEP 2: Get PERIOD MOVEMENTS (between start and end date)
+            // ==========================================
+            $movement_sql = "SELECT 
+                             SUM(debit_amount) as period_debit,
+                             SUM(credit_amount) as period_credit
+                             FROM ledger 
+                             WHERE account_code = '$account_code' 
+                             AND transaction_date BETWEEN '$start_date' AND '$query_end_date'";
+            $movement_result = mysqli_query($conn, $movement_sql);
+            
+            $period_debit = 0;
+            $period_credit = 0;
+            if ($movement_result && mysqli_num_rows($movement_result) > 0) {
+                $row = mysqli_fetch_assoc($movement_result);
+                $period_debit = roundAmount(floatval($row['period_debit'] ?? 0));
+                $period_credit = roundAmount(floatval($row['period_credit'] ?? 0));
+            }
+            
+            // ==========================================
+            // STEP 3: Calculate CLOSING BALANCE
+            // ==========================================
+            // Closing Balance = Initial Balance + Period Debit - Period Credit
+            $closing_balance = $initial_balance + $period_debit - $period_credit;
+            $closing_balance = roundAmount($closing_balance);
         }
-        
-        // Calculate initial balance (opening balance)
-        $initial_balance = $opening_debit - $opening_credit;
-        $initial_balance = roundAmount($initial_balance);
-        
-        // ==========================================
-        // STEP 2: Get PERIOD MOVEMENTS (between start and end date)
-        // ==========================================
-        $movement_sql = "SELECT 
-                         SUM(debit_amount) as period_debit,
-                         SUM(credit_amount) as period_credit
-                         FROM ledger 
-                         WHERE account_code = '$account_code' 
-                         AND transaction_date BETWEEN '$start_date' AND '$query_end_date'";
-        $movement_result = mysqli_query($conn, $movement_sql);
-        
-        $period_debit = 0;
-        $period_credit = 0;
-        if ($movement_result && mysqli_num_rows($movement_result) > 0) {
-            $row = mysqli_fetch_assoc($movement_result);
-            $period_debit = roundAmount(floatval($row['period_debit'] ?? 0));
-            $period_credit = roundAmount(floatval($row['period_credit'] ?? 0));
-        }
-        
-        // ==========================================
-        // STEP 3: Calculate CLOSING BALANCE
-        // ==========================================
-        // Closing Balance = Initial Balance + Period Debit - Period Credit
-        $closing_balance = $initial_balance + $period_debit - $period_credit;
-        $closing_balance = roundAmount($closing_balance);
         
         $trial_data[] = [
             'account_code' => $account_code,
@@ -383,12 +441,6 @@ switch ($report_type) {
         break;
 }
 
-// Validate date range
-if (strtotime($start_date) > strtotime($end_date)) {
-    $temp = $start_date;
-    $start_date = $end_date;
-    $end_date = $temp;
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -879,7 +931,10 @@ if (strtotime($start_date) > strtotime($end_date)) {
                                 <i class="fas fa-print"></i> Print
                             </button>
                             <button class="btn btn-outline-primary btn-sm ms-2" onclick="exportToExcel()">
-                                <i class="fas fa-download"></i> Export to Excel
+                                <i class="fas fa-file-excel"></i> Export to Excel
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm ms-2" onclick="exportToPDF()">
+                                <i class="fas fa-file-pdf"></i> Export to PDF
                             </button>
                         </div>
                     </div>
@@ -1502,6 +1557,15 @@ if (strtotime($start_date) > strtotime($end_date)) {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    function exportToPDF() {
+        const urlParams = new URLSearchParams({
+            type: document.getElementById('report_type_input').value,
+            start_date: document.querySelector('input[name="start_date"]').value,
+            end_date: document.querySelector('input[name="end_date"]').value
+        });
+        window.open('modules/export_financial_pdf.php?' + urlParams.toString(), '_blank');
     }
     </script>
 </body>

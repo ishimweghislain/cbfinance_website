@@ -417,7 +417,8 @@ switch ($report_type) {
         $net_income = $total_revenue - $total_expenses;
         $net_income = roundAmount($net_income);
         
-        // Sort: Revenue first, then Expenses
+        break;
+        
     case 'income_analysis':
         $report_title = "Income Analysis (By Customer)";
         
@@ -1499,8 +1500,7 @@ switch ($report_type) {
                                 </div>
                             </div>
                         </div>
-                        <?php endif; ?>
-
+                        
                         <?php elseif ($report_type == 'income_analysis'): ?>
                         <div class="table-responsive mt-3">
                             <table class="table table-bordered table-sm table-hover" id="reportTable">

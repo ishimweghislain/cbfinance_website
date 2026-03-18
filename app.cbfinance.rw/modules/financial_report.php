@@ -11,6 +11,7 @@ $report_type = isset($_GET['type']) ? $_GET['type'] : 'trial_balance';
 // Handle date range filters
 $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-01');
 $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d');
+$query_end_date = $end_date . ' 23:59:59';
 
 // Helper functions
 function formatMoney($amount, $decimals = 0) {
@@ -82,7 +83,7 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
                          SUM(credit_amount) as period_credit
                          FROM ledger 
                          WHERE account_code = '$account_code' 
-                         AND transaction_date BETWEEN '$start_date' AND '$end_date'";
+                         AND transaction_date BETWEEN '$start_date' AND '$query_end_date'";
         $movement_result = mysqli_query($conn, $movement_sql);
         
         $period_debit = 0;
@@ -156,7 +157,7 @@ $total_profit_loss_sql = "SELECT
     SUM(CASE WHEN SUBSTRING(account_code, 1, 1) = '4' THEN credit_amount - debit_amount ELSE 0 END) as total_revenue,
     SUM(CASE WHEN SUBSTRING(account_code, 1, 1) IN ('5', '6') THEN debit_amount - credit_amount ELSE 0 END) as total_expense
     FROM ledger 
-    WHERE transaction_date <= '$escaped_end_date'";
+    WHERE transaction_date <= '$query_end_date'";
 
 $total_pl_result = mysqli_query($conn, $total_profit_loss_sql);
 if ($total_pl_result && mysqli_num_rows($total_pl_result) > 0) {
@@ -347,9 +348,22 @@ switch ($report_type) {
         $report_title = "Income Statement";
         
         // Income Statement: Revenue (4), Expenses (5, 6)
-        foreach ($trial_data as $account) {
+        foreach ($trial_data as &$account) {
             $first_digit = substr($account['account_code'], 0, 1);
             
+            // Override 4101 and 4201 with actual cash from loan_payments
+            if ($account['account_code'] === '4101') {
+                $q = "SELECT SUM(interest_amount) as total FROM loan_payments WHERE payment_date BETWEEN '$start_date' AND '$query_end_date'";
+                $res = mysqli_query($conn, $q);
+                $row = mysqli_fetch_assoc($res);
+                $account['closing_balance'] = -floatval($row['total'] ?? 0); // Negative because revenue is credit
+            } else if ($account['account_code'] === '4201') {
+                $q = "SELECT SUM(monitoring_fee) as total FROM loan_payments WHERE payment_date BETWEEN '$start_date' AND '$query_end_date'";
+                $res = mysqli_query($conn, $q);
+                $row = mysqli_fetch_assoc($res);
+                $account['closing_balance'] = -floatval($row['total'] ?? 0);
+            }
+
             // Only include income statement accounts
             if ($first_digit == '4' || $first_digit == '5' || $first_digit == '6') {
                 $report_data[] = $account;

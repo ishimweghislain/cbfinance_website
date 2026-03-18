@@ -1389,7 +1389,9 @@ switch ($report_type) {
                                 <div class="is-col">
                                     <div class="is-section-title rev-title">
                                         <i class="fas fa-arrow-trend-up"></i> Revenue
-                                                                      <?php foreach ($revenue_groups as $class_name => $group): ?>
+                                    </div>
+
+                                    <?php foreach ($revenue_groups as $class_name => $group): ?>
                                     <div class="is-sub-label rev-sub"><?php echo htmlspecialchars($class_name); ?></div>
                                     <?php foreach ($group['rows'] as $row):
                                          $display = abs($row['closing_balance']);

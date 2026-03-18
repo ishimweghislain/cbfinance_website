@@ -1,6 +1,6 @@
 <?php
-$conn = new mysqli('localhost', 'root', '', 'cbfinance_accounting_loan_system');
-if ($conn->connect_error) { die("Connection failed: " . $conn->connect_error); }
+require_once __DIR__ . '/app.cbfinance.rw/config/database.php';
+$conn = getConnection();
 
 // First aggregate loan_payments by loan_id (fast - no big join)
 $pay_sql = "

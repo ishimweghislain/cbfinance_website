@@ -1495,13 +1495,24 @@ if (strtotime($start_date) > strtotime($end_date)) {
     
     function exportToExcel() {
         const table = document.getElementById('reportTable');
-        const html = table.outerHTML;
-        const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+        let csv = [];
+        for (let i = 0; i < table.rows.length; i++) {
+            let row = [], cols = table.rows[i].querySelectorAll('td, th');
+            for (let j = 0; j < cols.length; j++) {
+                let data = cols[j].innerText.replace(/"/g, '""').trim();
+                row.push('"' + data + '"');
+            }
+            csv.push(row.join(','));
+        }
+        const csvString = csv.join('\n');
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = '<?php echo preg_replace("/[^a-zA-Z0-9]/", "_", $report_title) . '_' . date('Y-m-d'); ?>.xls';
+        a.download = '<?php echo preg_replace("/[^a-zA-Z0-9]/", "_", $report_title) . '_' . date('Y-m-d'); ?>.csv';
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
     </script>

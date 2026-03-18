@@ -432,58 +432,26 @@ switch ($report_type) {
     case 'income_statement':
         $report_title = "Income Statement";
         
-        // Fetch detailed customer breakdown for revenue accounts (4101, 4201, 4202, 4204, 4205)
-        $customer_breakdown = [
-            '4101' => [], '4201' => [], '4202' => [], '4204' => [], '4205' => []
-        ];
-
-        // 1. Interest, Mgmt fees, Penalties from installments
-        $sql_det = "SELECT c.customer_name, lp.loan_number,
-                    SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.interest_paid ELSE 0 END) as int_paid,
-                    (SUM(li.interest_amount) - SUM(li.interest_paid)) as int_rem,
-                    SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.management_fee_paid ELSE 0 END) as mgmt_paid,
-                    (SUM(li.management_fee) - SUM(li.management_fee_paid)) as mgmt_rem,
-                    SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.penalty_paid ELSE 0 END) as pen_paid,
-                    (SUM(li.penalty_amount) - SUM(li.penalty_paid)) as pen_rem
-                    FROM loan_portfolio lp
-                    JOIN customers c ON lp.customer_id = c.customer_id
-                    JOIN loan_instalments li ON lp.loan_id = li.loan_id
-                    GROUP BY lp.loan_id HAVING (int_paid > 0 OR mgmt_paid > 0 OR pen_paid > 0)
-                    ORDER BY c.customer_name";
-        $res_det = mysqli_query($conn, $sql_det);
-        if ($res_det) {
-            while ($r = mysqli_fetch_assoc($res_det)) {
-                if ($r['int_paid'] > 0) $customer_breakdown['4101'][] = ['name' => $r['customer_name'], 'paid' => $r['int_paid'], 'rem' => $r['int_rem']];
-                if ($r['mgmt_paid'] > 0) $customer_breakdown['4201'][] = ['name' => $r['customer_name'], 'paid' => $r['mgmt_paid'], 'rem' => $r['mgmt_rem']];
-                if ($r['pen_paid'] > 0) $customer_breakdown['4205'][] = ['name' => $r['customer_name'], 'paid' => $r['pen_paid'], 'rem' => $r['pen_rem']];
-            }
-        }
-
-        // 2. Disbursement Fees from loan_portfolio
-        $sql_disb = "SELECT c.customer_name, lp.management_fee_amount as paid
-                     FROM loan_portfolio lp
-                     JOIN customers c ON lp.customer_id = c.customer_id
-                     WHERE lp.disbursement_date BETWEEN '$start_date' AND '$query_end_date'
-                     AND lp.management_fee_amount > 0
-                     ORDER BY c.customer_name";
-        $res_disb = mysqli_query($conn, $sql_disb);
-        if ($res_disb) {
-            while ($r = mysqli_fetch_assoc($res_disb)) {
-                $customer_breakdown['4202'][] = ['name' => $r['customer_name'], 'paid' => $r['paid'], 'rem' => 0];
-            }
-        }
-
-        // 3. Application Fees from application_fees table
-        $sql_app = "SELECT c.customer_name, SUM(amount) as paid
-                    FROM application_fees af
-                    JOIN customers c ON af.customer_id = c.customer_id
-                    WHERE af.status = 'Paid' AND af.transaction_date BETWEEN '$start_date' AND '$query_end_date'
-                    GROUP BY c.customer_id
-                    ORDER BY c.customer_name";
-        $res_app = mysqli_query($conn, $sql_app);
-        if ($res_app) {
-            while ($r = mysqli_fetch_assoc($res_app)) {
-                $customer_breakdown['4204'][] = ['name' => $r['customer_name'], 'paid' => $r['paid'], 'rem' => 0];
+        // Fetch ALL customers and their consolidated revenue activity in the period (Unified Table)
+        $unified_revenue = [];
+        $sql_unified = "SELECT 
+            c.customer_id, 
+            c.customer_name,
+            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.interest_paid ELSE 0 END) as int_pd,
+            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.management_fee_paid ELSE 0 END) as mgmt_pd,
+            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.penalty_paid ELSE 0 END) as pen_pd,
+            (SELECT SUM(lp2.management_fee_amount) FROM loan_portfolio lp2 WHERE lp2.customer_id = c.customer_id AND lp2.disbursement_date BETWEEN '$start_date' AND '$query_end_date') as disb_pd,
+            (SELECT SUM(af.amount) FROM application_fees af WHERE af.customer_id = c.customer_id AND af.status = 'Paid' AND af.transaction_date BETWEEN '$start_date' AND '$query_end_date') as app_pd
+            FROM customers c
+            LEFT JOIN loan_portfolio lp ON c.customer_id = lp.customer_id
+            LEFT JOIN loan_instalments li ON lp.loan_id = li.loan_id
+            GROUP BY c.customer_id
+            ORDER BY c.customer_name";
+            
+        $res_unified = mysqli_query($conn, $sql_unified);
+        if ($res_unified) {
+            while ($r = mysqli_fetch_assoc($res_unified)) {
+                $unified_revenue[] = $r;
             }
         }
 
@@ -1421,12 +1389,10 @@ switch ($report_type) {
                                 <div class="is-col">
                                     <div class="is-section-title rev-title">
                                         <i class="fas fa-arrow-trend-up"></i> Revenue
-                                    </div>
-
-                                    <?php foreach ($revenue_groups as $class_name => $group): ?>
+                                                                      <?php foreach ($revenue_groups as $class_name => $group): ?>
                                     <div class="is-sub-label rev-sub"><?php echo htmlspecialchars($class_name); ?></div>
                                     <?php foreach ($group['rows'] as $row):
-                                        $display = abs($row['closing_balance']);
+                                         $display = abs($row['closing_balance']);
                                     ?>
                                     <div class="is-row">
                                         <div class="acct-info">
@@ -1435,32 +1401,6 @@ switch ($report_type) {
                                         </div>
                                         <span class="acct-amount rev-amt"><?php echo formatMoney($display); ?></span>
                                     </div>
-                                    
-                                    <?php 
-                                    // Customer breakdown for specific revenue accounts (Interest, Mgmt Fees, etc.)
-                                    $code = $row['account_code'];
-                                    if (isset($customer_breakdown[$code]) && !empty($customer_breakdown[$code])): ?>
-                                        <div class="customer-breakdown ms-4 mb-2 small text-muted bg-light p-2 rounded shadow-sm border">
-                                            <table class="table table-borderless table-sm mb-0" style="font-size: 0.72rem; width: 100%;">
-                                                <thead class="border-bottom">
-                                                    <tr>
-                                                        <th>Paid By (Customer)</th>
-                                                        <th class="text-end">Paid Period</th>
-                                                        <th class="text-end">Balance Left</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($customer_breakdown[$code] as $cust): ?>
-                                                    <tr>
-                                                        <td><i class="fas fa-user-circle me-1 opacity-50"></i><?php echo htmlspecialchars($cust['name']); ?></td>
-                                                        <td class="text-end fw-bold"><?php echo formatMoney($cust['paid']); ?></td>
-                                                        <td class="text-end text-danger"><?php echo $cust['rem'] > 0 ? formatMoney($cust['rem']) : '-'; ?></td>
-                                                    </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    <?php endif; ?>
                                     <?php endforeach; ?>
                                     <div class="is-class-total rev-class-total">
                                         <span><?php echo htmlspecialchars($class_name); ?> Total</span>
@@ -1468,6 +1408,73 @@ switch ($report_type) {
                                     </div>
                                     <?php endforeach; ?>
 
+                                    <!-- Unified Revenue Breakdown by Customer -->
+                                    <div class="p-3 bg-light border-top border-bottom no-print">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0 text-primary"><i class="fas fa-users me-2"></i>Revenue Analysis by Customer</h6>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="showCustBreakdown" onchange="toggleBreakdown()">
+                                                <label class="form-check-label small" for="showCustBreakdown">View Details</label>
+                                            </div>
+                                        </div>
+                                        
+                                        <div id="unifiedBreakdown" style="display: none;">
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-hover border" style="font-size: 0.75rem;">
+                                                    <thead class="table-dark">
+                                                        <tr>
+                                                            <th>Customer Name</th>
+                                                            <th class="text-end">Interest</th>
+                                                            <th class="text-end">Mgmt Fee</th>
+                                                            <th class="text-end">Disbursement</th>
+                                                            <th class="text-end">App Fee</th>
+                                                            <th class="text-end">Penalties</th>
+                                                            <th class="text-end fw-bold">Total</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php 
+                                                        $gt_int=0; $gt_mgmt=0; $gt_disb=0; $gt_app=0; $gt_pen=0; $gt_total=0;
+                                                        foreach ($unified_revenue as $r): 
+                                                            $row_total = $r['int_pd'] + $r['mgmt_pd'] + $r['disb_pd'] + $r['app_pd'] + $r['pen_pd'];
+                                                            $gt_int+=$r['int_pd']; $gt_mgmt+=$r['mgmt_pd']; $gt_disb+=$r['disb_pd'];
+                                                            $gt_app+=$r['app_pd']; $gt_pen+=$r['pen_pd']; $gt_total+=$row_total;
+                                                        ?>
+                                                        <tr>
+                                                            <td><?php echo htmlspecialchars($r['customer_name']); ?></td>
+                                                            <td class="text-end"><?php echo formatMoney($r['int_pd']); ?></td>
+                                                            <td class="text-end"><?php echo formatMoney($r['mgmt_pd']); ?></td>
+                                                            <td class="text-end"><?php echo formatMoney($r['disb_pd']); ?></td>
+                                                            <td class="text-end"><?php echo formatMoney($r['app_pd']); ?></td>
+                                                            <td class="text-end"><?php echo formatMoney($r['pen_pd']); ?></td>
+                                                            <td class="text-end fw-bold"><?php echo formatMoney($row_total); ?></td>
+                                                        </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                    <tfoot class="table-secondary fw-bold">
+                                                        <tr>
+                                                            <td>TOTALS</td>
+                                                            <td class="text-end"><?php echo formatMoney($gt_int); ?></td>
+                                                            <td class="text-end"><?php echo formatMoney($gt_mgmt); ?></td>
+                                                            <td class="text-end"><?php echo formatMoney($gt_disb); ?></td>
+                                                            <td class="text-end"><?php echo formatMoney($gt_app); ?></td>
+                                                            <td class="text-end"><?php echo formatMoney($gt_pen); ?></td>
+                                                            <td class="text-end"><?php echo formatMoney($gt_total); ?></td>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
+                                            </div>
+                                            <div class="alert alert-warning py-1 px-2 mt-2" style="font-size: 0.7rem;">
+                                                <i class="fas fa-info-circle me-1"></i> Use this list to verify that the sum of all customer payments matches the total reported above.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <script>
+                                        function toggleBreakdown() {
+                                            const box = document.getElementById('unifiedBreakdown');
+                                            box.style.display = document.getElementById('showCustBreakdown').checked ? 'block' : 'none';
+                                        }
+                                    </script>
                                     <div class="is-section-total rev-total">
                                         <span><i class="fas fa-sigma me-1"></i> TOTAL REVENUE</span>
                                         <span><?php echo formatMoney($is_rev_total); ?></span>

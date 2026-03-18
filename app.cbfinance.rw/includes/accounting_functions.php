@@ -88,7 +88,7 @@ function createDisbursementJournalEntries($conn, $loan_id, $data) {
             ['account_code' => '1201', 'debit' => $data['disbursement_fees'], 'credit' => 0, 'description' => 'Deferred Disbursement Fees'],
             ['account_code' => '1201', 'debit' => $data['disbursement_fees_vat'], 'credit' => 0, 'description' => 'Disbursement VAT Portion'],
             ['account_code' => $data['bank_account_id'], 'debit' => 0, 'credit' => $data['disbursement_amount'], 'description' => 'Bank Account'],
-            ['account_code' => '4201', 'debit' => 0, 'credit' => $data['disbursement_fees'], 'description' => 'Disbursement Fee Income'],
+            ['account_code' => '4202', 'debit' => 0, 'credit' => $data['disbursement_fees'], 'description' => 'Disbursement Fee Income'],
             ['account_code' => '2105', 'debit' => 0, 'credit' => $data['disbursement_fees_vat'], 'description' => 'VAT Payable (Disbursement Fee Portion)']
         ]
     ]);

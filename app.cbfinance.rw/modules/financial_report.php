@@ -62,49 +62,37 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
         }
         
         // ==========================================
-        // CUSTOM LOGIC: Paid-Basis Income Correction for Accounts 4101 and 4201
+        // CUSTOM LOGIC: Paid-Basis Income Correction for Accounts 4101, 4201, 4202, 4205
         // Users want these accounts to reflect ACTUAL PAYMENTS (from loan_instalments)
         // NOT what is in the ledger (which might contain accruals).
         // ==========================================
-        if ($account_code === '4101' || $account_code === '4201') {
+        if (in_array($account_code, ['4101', '4201', '4202', '4205'])) {
             
-            // 1. Initial Balance (Opening) - Sum of payments BEFORE start date
-            $col_paid = ($account_code === '4101') ? 'interest_paid' : 'management_fee_paid';
+            // 1. Initial Balance (Opening)
+            $col_paid = '';
+            if ($account_code === '4101') $col_paid = 'interest_paid';
+            elseif ($account_code === '4201') $col_paid = 'management_fee_paid';
+            elseif ($account_code === '4205') $col_paid = 'penalty_paid';
             
-            $open_income_sql = "SELECT SUM($col_paid) as total_paid FROM loan_instalments WHERE payment_date < '$start_date'";
-            $res_open = mysqli_query($conn, $open_income_sql);
-            $row_open = mysqli_fetch_assoc($res_open);
-            // Income is Credit, so we represent initial balance as -amount (using ledger convention)
-            // Wait, this report uses debit-credit = balance. So Credit balance is Negative.
-            $initial_balance = -roundAmount(floatval($row_open['total_paid'] ?? 0));
-            
-            // 2. Period Movements - Sum of payments DURING period
-            $move_income_sql = "SELECT SUM($col_paid) as period_paid FROM loan_instalments WHERE payment_date BETWEEN '$start_date' AND '$query_end_date'";
-            $res_move = mysqli_query($conn, $move_income_sql);
-            $row_move = mysqli_fetch_assoc($res_move);
-            
-            $period_debit = 0;
-            $period_credit = roundAmount(floatval($row_move['period_paid'] ?? 0));
-            
-            // For 4201, we also need to include Disbursement Fees taken at the start (not in installments)
-            // These would be ledger entries without a reference_type = 'loan_payment' or 'loan_prepayment'
-            // OR simply any 4201 entry whose narration contains 'Disbursement' and NOT in installments
-            if ($account_code === '4201') {
-                $extra_move_sql = "SELECT SUM(credit_amount) as extra_credit FROM ledger 
-                                   WHERE account_code = '4201' 
-                                   AND reference_type NOT IN ('loan_payment', 'loan_prepayment')
-                                   AND transaction_date BETWEEN '$start_date' AND '$query_end_date'";
-                $res_extra = mysqli_query($conn, $extra_move_sql);
-                $row_extra = mysqli_fetch_assoc($res_extra);
-                $period_credit += roundAmount(floatval($row_extra['extra_credit'] ?? 0));
+            if ($col_paid) {
+                $res_open = mysqli_query($conn, "SELECT SUM($col_paid) as op FROM loan_instalments WHERE payment_date < '$start_date'");
+                $row_open = mysqli_fetch_assoc($res_open);
+                $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
                 
-                $extra_open_sql = "SELECT SUM(credit_amount) as extra_credit FROM ledger 
-                                   WHERE account_code = '4201' 
-                                   AND reference_type NOT IN ('loan_payment', 'loan_prepayment')
-                                   AND transaction_date < '$start_date'";
-                $res_extra_open = mysqli_query($conn, $extra_open_sql);
-                $row_extra_open = mysqli_fetch_assoc($res_extra_open);
-                $initial_balance -= roundAmount(floatval($row_extra_open['extra_credit'] ?? 0));
+                $res_move = mysqli_query($conn, "SELECT SUM($col_paid) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date' AND '$query_end_date'");
+                $row_move = mysqli_fetch_assoc($res_move);
+                $period_debit = 0;
+                $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
+            } else {
+                // For 4202 (Disbursement Fee), we take directly from ledger because it's not in installments
+                $res_open = mysqli_query($conn, "SELECT SUM(credit_amount - debit_amount) as op FROM ledger WHERE account_code = '$account_code' AND transaction_date < '$start_date'");
+                $row_open = mysqli_fetch_assoc($res_open);
+                $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
+                
+                $res_move = mysqli_query($conn, "SELECT SUM(debit_amount) as d, SUM(credit_amount) as c FROM ledger WHERE account_code = '$account_code' AND transaction_date BETWEEN '$start_date' AND '$query_end_date'");
+                $row_move = mysqli_fetch_assoc($res_move);
+                $period_debit = roundAmount(floatval($row_move['d'] ?? 0));
+                $period_credit = roundAmount(floatval($row_move['c'] ?? 0));
             }
             
             $closing_balance = $initial_balance + $period_debit - $period_credit;
@@ -430,9 +418,34 @@ switch ($report_type) {
         $net_income = roundAmount($net_income);
         
         // Sort: Revenue first, then Expenses
-        usort($report_data, function($a, $b) {
-            return strcmp($a['account_code'], $b['account_code']);
-        });
+    case 'income_analysis':
+        $report_title = "Income Analysis (By Customer)";
+        
+        // Fetch detailed loan income data
+        $analysis_sql = "SELECT 
+            lp.loan_id, lp.loan_number, c.customer_name,
+            -- Paid during period
+            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.interest_paid ELSE 0 END) as period_interest_paid,
+            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.management_fee_paid ELSE 0 END) as period_fee_paid,
+            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.penalty_paid ELSE 0 END) as period_penalty_paid,
+            -- Totals to date
+            SUM(li.interest_paid) as total_interest_paid,
+            SUM(li.management_fee_paid) as total_fee_paid,
+            SUM(li.penalty_paid) as total_penalty_paid,
+            -- Total expected for comparison
+            SUM(li.interest_amount) as total_interest_exp,
+            SUM(li.management_fee) as total_fee_exp,
+            SUM(li.penalty_amount) as total_penalty_exp
+            FROM loan_portfolio lp
+            JOIN customers c ON lp.customer_id = c.customer_id
+            JOIN loan_instalments li ON lp.loan_id = li.loan_id
+            GROUP BY lp.loan_id
+            ORDER BY c.customer_name";
+            
+        $analysis_res = mysqli_query($conn, $analysis_sql);
+        while ($row = mysqli_fetch_assoc($analysis_res)) {
+            $report_data[] = $row;
+        }
         break;
         
     default:
@@ -906,6 +919,12 @@ switch ($report_type) {
                                 <button class="nav-link <?php echo $report_type == 'income_statement' ? 'active' : ''; ?>" 
                                         type="button" onclick="switchReportType('income_statement')">
                                     <i class="fas fa-chart-line me-1"></i> Income Statement
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link <?php echo $report_type == 'income_analysis' ? 'active' : ''; ?>" 
+                                        type="button" onclick="switchReportType('income_analysis')">
+                                    <i class="fas fa-search-dollar me-1"></i> Income Analysis (Customer)
                                 </button>
                             </li>
                         </ul>
@@ -1481,6 +1500,69 @@ switch ($report_type) {
                             </div>
                         </div>
                         <?php endif; ?>
+
+                        <?php elseif ($report_type == 'income_analysis'): ?>
+                        <div class="table-responsive mt-3">
+                            <table class="table table-bordered table-sm table-hover" id="reportTable">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Customer / Loan</th>
+                                        <th class="text-end">Paid Interest (Period)</th>
+                                        <th class="text-end">Paid Mgmt Fee (Period)</th>
+                                        <th class="text-end">Paid Penalties (Period)</th>
+                                        <th class="text-end">Total Interest Paid</th>
+                                        <th class="text-end">Total Mgmt Fee Paid</th>
+                                        <th class="text-end">Interest Left</th>
+                                        <th class="text-end">Mgmt Fee Left</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php 
+                                    $t_pi = 0; $t_pm = 0; $t_pp = 0;
+                                    $t_ti = 0; $t_tm = 0;
+                                    $t_ri = 0; $t_rm = 0;
+                                    
+                                    foreach ($report_data as $row): 
+                                        $rem_i = $row['total_interest_exp'] - $row['total_interest_paid'];
+                                        $rem_m = $row['total_fee_exp'] - $row['total_fee_paid'];
+                                        
+                                        $t_pi += $row['period_interest_paid'];
+                                        $t_pm += $row['period_fee_paid'];
+                                        $t_pp += $row['period_penalty_paid'];
+                                        $t_ti += $row['total_interest_paid'];
+                                        $t_tm += $row['total_fee_paid'];
+                                        $t_ri += $rem_i;
+                                        $t_rm += $rem_m;
+                                    ?>
+                                    <tr>
+                                        <td>
+                                            <strong><?php echo htmlspecialchars($row['customer_name']); ?></strong><br>
+                                            <small><?php echo htmlspecialchars($row['loan_number']); ?></small>
+                                        </td>
+                                        <td class="text-end"><?php echo formatMoney($row['period_interest_paid']); ?></td>
+                                        <td class="text-end"><?php echo formatMoney($row['period_fee_paid']); ?></td>
+                                        <td class="text-end"><?php echo formatMoney($row['period_penalty_paid']); ?></td>
+                                        <td class="text-end fw-bold"><?php echo formatMoney($row['total_interest_paid']); ?></td>
+                                        <td class="text-end fw-bold"><?php echo formatMoney($row['total_fee_paid']); ?></td>
+                                        <td class="text-end text-danger"><?php echo formatMoney($rem_i); ?></td>
+                                        <td class="text-end text-danger"><?php echo formatMoney($rem_m); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                                <tfoot class="table-light fw-bold">
+                                    <tr>
+                                        <td>TOTALS</td>
+                                        <td class="text-end"><?php echo formatMoney($t_pi); ?></td>
+                                        <td class="text-end"><?php echo formatMoney($t_pm); ?></td>
+                                        <td class="text-end"><?php echo formatMoney($t_pp); ?></td>
+                                        <td class="text-end"><?php echo formatMoney($t_ti); ?></td>
+                                        <td class="text-end"><?php echo formatMoney($t_tm); ?></td>
+                                        <td class="text-end text-danger"><?php echo formatMoney($t_ri); ?></td>
+                                        <td class="text-end text-danger"><?php echo formatMoney($t_rm); ?></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                         <?php endif; ?>
                     </div>
                     <div class="card-footer text-muted text-center">
@@ -1538,21 +1620,53 @@ switch ($report_type) {
     
     function exportToExcel() {
         const table = document.getElementById('reportTable');
+        if (!table) {
+            alert("No report data found to export.");
+            return;
+        }
+
         let csv = [];
-        for (let i = 0; i < table.rows.length; i++) {
-            let row = [], cols = table.rows[i].querySelectorAll('td, th');
-            for (let j = 0; j < cols.length; j++) {
-                let data = cols[j].innerText.replace(/"/g, '""').trim();
-                row.push('"' + data + '"');
+        if (table.tagName === 'TABLE') {
+            for (let i = 0; i < table.rows.length; i++) {
+                let row = [], cols = table.rows[i].querySelectorAll('td, th');
+                for (let j = 0; j < cols.length; j++) {
+                    let data = cols[j].innerText.replace(/"/g, '""').trim();
+                    row.push('"' + data + '"');
+                }
+                csv.push(row.join(','));
             }
-            csv.push(row.join(','));
+        } else {
+            // Special handling for Div-based reports (Balance Sheet / Income Statement)
+            const rows = table.querySelectorAll('.bs-row, .is-row, .bs-section-title, .is-section-title, .bs-grand-total, .is-section-total, .is-net-bar, .bs-sub-label, .is-sub-label');
+            rows.forEach(r => {
+                let rowData = [];
+                if (r.classList.contains('bs-row') || r.classList.contains('is-row')) {
+                    const acctName = r.querySelector('.acct-name')?.innerText || '';
+                    const acctCode = r.querySelector('.account-code')?.innerText || '';
+                    const acctAmt = r.querySelector('.acct-amount')?.innerText || '';
+                    rowData.push('"' + (acctCode ? '['+acctCode+'] ' : '') + acctName.replace(/"/g, '""').trim() + '"');
+                    rowData.push('"' + acctAmt.replace(/"/g, '""').trim() + '"');
+                } else {
+                    // Header or Total line
+                    const text = r.innerText.replace(/\n/g, ' ').replace(/"/g, '""').trim();
+                    const parts = text.split(/\s{2,}/); // Try to split large spaces if any
+                    if (parts.length > 1) {
+                        rowData.push('"' + parts[0] + '"');
+                        rowData.push('"' + parts[parts.length-1] + '"');
+                    } else {
+                        rowData.push('"' + text + '"');
+                    }
+                }
+                if (rowData.length > 0) csv.push(rowData.join(','));
+            });
         }
         const csvString = csv.join('\n');
         const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = '<?php echo preg_replace("/[^a-zA-Z0-9]/", "_", $report_title) . '_' . date('Y-m-d'); ?>.csv';
+        const reportTitle = "<?php echo $report_title; ?>".replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        a.download = reportTitle + '_' + new Date().toISOString().split('T')[0] + '.csv';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

@@ -1256,8 +1256,9 @@ switch ($report_type) {
                                             <?php echo formatMoney($closing_balance); ?>
                                         </td>
                                     </tr>
-                                    <?php endforeach; 
+                                    <?php endforeach; ?>
                                     
+                                    <?php 
                                     // Print final class total
                                     if ($current_class != ''):
                                     ?>
@@ -1522,7 +1523,7 @@ switch ($report_type) {
                                     $t_ti = 0; $t_tm = 0;
                                     $t_ri = 0; $t_rm = 0;
                                     
-                                    foreach ($report_data as $row): 
+                                    foreach ($report_data as $row) {
                                         $rem_i = $row['total_interest_exp'] - $row['total_interest_paid'];
                                         $rem_m = $row['total_fee_exp'] - $row['total_fee_paid'];
                                         
@@ -1547,7 +1548,7 @@ switch ($report_type) {
                                         <td class="text-end text-danger"><?php echo formatMoney($rem_i); ?></td>
                                         <td class="text-end text-danger"><?php echo formatMoney($rem_m); ?></td>
                                     </tr>
-                                    <?php endforeach; ?>
+                                    <?php } ?>
                                 </tbody>
                                 <tfoot class="table-light fw-bold">
                                     <tr>
@@ -1684,7 +1685,6 @@ switch ($report_type) {
     </script>
 </body>
 </html>
-
 <?php 
 // Close connections
 if (isset($conn)) mysqli_close($conn); 

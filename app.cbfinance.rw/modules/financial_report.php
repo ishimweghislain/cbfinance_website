@@ -27,6 +27,7 @@ function roundAmount($amount, $decimals = 2) {
 // ========================================
 function calculateTrialBalance($conn, $start_date, $end_date) {
     $trial_data = [];
+    $query_end_date = $end_date . ' 23:59:59';
     
     // Get all accounts from chart_of_accounts
     $accounts_sql = "SELECT account_code, account_name, class, normal_balance 

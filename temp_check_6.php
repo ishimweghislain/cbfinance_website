@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../config/database.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -373,7 +373,7 @@ switch ($report_type) {
             }
         }
         
-        // Sort each section by class first, then account code — keeps groups together
+        // Sort each section by class first, then account code â€” keeps groups together
         usort($assets_data, function($a, $b) {
             $cls = strcmp(trim($a['class']), trim($b['class']));
             return $cls !== 0 ? $cls : strcmp($a['account_code'], $b['account_code']);
@@ -543,7 +543,7 @@ switch ($report_type) {
         }
 
         /* ===================================
-           BALANCE SHEET — ENHANCED CLARITY
+           BALANCE SHEET â€” ENHANCED CLARITY
         ==================================== */
         .bs-wrapper {
             display: grid;
@@ -679,7 +679,7 @@ switch ($report_type) {
         .balance-sheet-table td { vertical-align: top; padding: 0 10px; width: 50%; }
 
         /* ===================================
-           INCOME STATEMENT — ENHANCED CLARITY
+           INCOME STATEMENT â€” ENHANCED CLARITY
         ==================================== */
         .is-wrapper {
             border: 2px solid #c8d0e0;
@@ -981,7 +981,7 @@ switch ($report_type) {
                         
                         <?php if ($report_type == 'balance_sheet'): ?>
                         <!-- =============================================
-                             BALANCE SHEET — ENHANCED TWO-COLUMN LAYOUT
+                             BALANCE SHEET â€” ENHANCED TWO-COLUMN LAYOUT
                         ============================================== -->
 
                         <?php
@@ -1289,9 +1289,9 @@ switch ($report_type) {
                             </table>
                         </div>
 
-                        <?php elseif ($report_type == 'income_statement'): ?>
+                        <?php else: ?>
                         <!-- =============================================
-                             INCOME STATEMENT — ENHANCED TWO-COLUMN LAYOUT
+                             INCOME STATEMENT â€” ENHANCED TWO-COLUMN LAYOUT
                         ============================================== -->
                         <?php
                         // Pre-group income statement data by section and class
@@ -1398,295 +1398,3 @@ switch ($report_type) {
                                     <div style="font-size:0.8rem;opacity:0.8;">
                                         <?php echo $total_revenue > 0 ? number_format(($net_income / $total_revenue) * 100, 2) : '0.00'; ?>% Profit Margin
                                     </div>
-                                </div>
-                                <div class="net-amount"><?php echo formatMoney(abs($net_income)); ?></div>
-                            </div>
-                        </div><!-- /.is-wrapper -->
-
-                        <?php endif; ?>
-                        
-                        <!-- Report Specific Summaries -->
-                        <?php if ($report_type == 'balance_sheet'): ?>
-                        <div class="financial-summary mt-4">
-                            <h6><i class="fas fa-balance-scale me-2"></i>Balance Sheet Summary</h6>
-                            <div class="row">
-                                <div class="col-md-4">
-                                    <div class="card bg-light mb-3">
-                                        <div class="card-body text-center">
-                                            <h6 class="card-title text-muted">Total Assets</h6>
-                                            <p class="card-text h5 <?php echo $total_assets > 0 ? 'text-success' : 'text-danger'; ?>">
-                                                <?php echo formatMoney($total_assets); ?>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="card bg-light mb-3">
-                                        <div class="card-body text-center">
-                                            <h6 class="card-title text-muted">Total Liabilities</h6>
-                                            <p class="card-text h5 text-danger">
-                                                <?php echo formatMoney(abs($total_liabilities)); ?>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="card bg-light mb-3">
-                                        <div class="card-body text-center">
-                                            <h6 class="card-title text-muted">Total Equity</h6>
-                                            <p class="card-text h5 text-primary">
-                                                <?php echo formatMoney(abs($total_equity)); ?>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="accounting-equation mt-3">
-                                <h6><i class="fas fa-equals me-2"></i>Accounting Equation</h6>
-                                <div class="text-center">
-                                    <h5>
-                                        Assets = Liabilities + Equity
-                                    </h5>
-                                    <p class="mb-0">
-                                        <?php echo formatMoney($total_assets); ?> = 
-                                        <?php echo formatMoney(abs($total_liabilities)); ?> + 
-                                        <?php echo formatMoney(abs($total_equity)); ?>
-                                    </p>
-                                    <small class="text-muted">
-                                        (Equity includes Net Income: <?php echo formatMoney($net_income_from_trial); ?>)
-                                    </small>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <?php elseif ($report_type == 'income_statement'): ?>
-                        <div class="financial-summary mt-4">
-                            <h6><i class="fas fa-chart-line me-2"></i>Income Statement Summary</h6>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="card bg-light mb-3">
-                                        <div class="card-body text-center">
-                                            <h6 class="card-title text-muted">Total Revenue</h6>
-                                            <p class="card-text h5 text-success">
-                                                <?php echo formatMoney($total_revenue); ?>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="card bg-light mb-3">
-                                        <div class="card-body text-center">
-                                            <h6 class="card-title text-muted">Total Expenses</h6>
-                                            <p class="card-text h5 text-danger">
-                                                <?php echo formatMoney($total_expenses); ?>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="accounting-equation mt-3 <?php echo $net_income >= 0 ? 'bg-success' : 'bg-danger'; ?> text-white">
-                                <div class="text-center">
-                                    <h5>
-                                        <i class="fas <?php echo $net_income >= 0 ? 'fa-arrow-up' : 'fa-arrow-down'; ?> me-2"></i>
-                                        Net <?php echo $net_income >= 0 ? 'Income (Profit)' : 'Loss'; ?>
-                                    </h5>
-                                    <h3 class="mb-0">
-                                        <?php echo formatMoney(abs($net_income)); ?>
-                                    </h3>
-                                    <small>
-                                        (<?php echo $total_revenue > 0 ? number_format(($net_income / $total_revenue) * 100, 2) : '0.00'; ?>% Profit Margin)
-                                    </small>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <?php elseif ($report_type == 'income_analysis'): ?>
-                        <div class="table-responsive mt-3">
-                            <table class="table table-bordered table-sm table-hover" id="reportTable">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Customer / Loan</th>
-                                        <th class="text-end">Paid Interest (Period)</th>
-                                        <th class="text-end">Paid Mgmt Fee (Period)</th>
-                                        <th class="text-end">Paid Penalties (Period)</th>
-                                        <th class="text-end">Total Interest Paid</th>
-                                        <th class="text-end">Total Mgmt Fee Paid</th>
-                                        <th class="text-end">Interest Left</th>
-                                        <th class="text-end">Mgmt Fee Left</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php 
-                                    $t_pi = 0; $t_pm = 0; $t_pp = 0;
-                                    $t_ti = 0; $t_tm = 0;
-                                    $t_ri = 0; $t_rm = 0;
-                                    
-                                    foreach ($report_data as $row) {
-                                        $rem_i = $row['total_interest_exp'] - $row['total_interest_paid'];
-                                        $rem_m = $row['total_fee_exp'] - $row['total_fee_paid'];
-                                        
-                                        $t_pi += $row['period_interest_paid'];
-                                        $t_pm += $row['period_fee_paid'];
-                                        $t_pp += $row['period_penalty_paid'];
-                                        $t_ti += $row['total_interest_paid'];
-                                        $t_tm += $row['total_fee_paid'];
-                                        $t_ri += $rem_i;
-                                        $t_rm += $rem_m;
-                                    ?>
-                                    <tr>
-                                        <td>
-                                            <strong><?php echo htmlspecialchars($row['customer_name']); ?></strong><br>
-                                            <small><?php echo htmlspecialchars($row['loan_number']); ?></small>
-                                        </td>
-                                        <td class="text-end"><?php echo formatMoney($row['period_interest_paid']); ?></td>
-                                        <td class="text-end"><?php echo formatMoney($row['period_fee_paid']); ?></td>
-                                        <td class="text-end"><?php echo formatMoney($row['period_penalty_paid']); ?></td>
-                                        <td class="text-end fw-bold"><?php echo formatMoney($row['total_interest_paid']); ?></td>
-                                        <td class="text-end fw-bold"><?php echo formatMoney($row['total_fee_paid']); ?></td>
-                                        <td class="text-end text-danger"><?php echo formatMoney($rem_i); ?></td>
-                                        <td class="text-end text-danger"><?php echo formatMoney($rem_m); ?></td>
-                                    </tr>
-                                    <?php } ?>
-                                </tbody>
-                                <tfoot class="table-light fw-bold">
-                                    <tr>
-                                        <td>TOTALS</td>
-                                        <td class="text-end"><?php echo formatMoney($t_pi); ?></td>
-                                        <td class="text-end"><?php echo formatMoney($t_pm); ?></td>
-                                        <td class="text-end"><?php echo formatMoney($t_pp); ?></td>
-                                        <td class="text-end"><?php echo formatMoney($t_ti); ?></td>
-                                        <td class="text-end"><?php echo formatMoney($t_tm); ?></td>
-                                        <td class="text-end text-danger"><?php echo formatMoney($t_ri); ?></td>
-                                        <td class="text-end text-danger"><?php echo formatMoney($t_rm); ?></td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                        <?php endif; ?>
-                        <?php endif; ?>
-                    </div>
-                    <div class="card-footer text-muted text-center">
-                        Generated on <?php echo date('F d, Y h:i A'); ?> | 
-                        <?php if ($report_type == 'balance_sheet'): ?>
-                        As of: <?php echo date('d/m/Y', strtotime($end_date)); ?>
-                        <?php else: ?>
-                        Period: <?php echo date('d/m/Y', strtotime($start_date)); ?> - <?php echo date('d/m/Y', strtotime($end_date)); ?>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-    function switchReportType(type) {
-        const form = document.getElementById('reportFilter');
-        // Use the dedicated id to reliably find the type input
-        const typeInput = document.getElementById('report_type_input');
-        if (typeInput) {
-            typeInput.value = type;
-        }
-        form.submit();
-    }
-    
-    function setDateRange(range) {
-        const today = new Date();
-        const startDateInput = document.querySelector('input[name="start_date"]');
-        const endDateInput = document.querySelector('input[name="end_date"]');
-        
-        if (range === 'today') {
-            startDateInput.value = formatDate(today);
-            endDateInput.value = formatDate(today);
-        } else if (range === 'month') {
-            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-            startDateInput.value = formatDate(firstDay);
-            endDateInput.value = formatDate(today);
-        } else if (range === 'year') {
-            const firstDay = new Date(today.getFullYear(), 0, 1);
-            startDateInput.value = formatDate(firstDay);
-            endDateInput.value = formatDate(today);
-        }
-        
-        document.getElementById('reportFilter').submit();
-    }
-    
-    function formatDate(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    }
-    
-    function exportToExcel() {
-        const table = document.getElementById('reportTable');
-        if (!table) {
-            alert("No report data found to export.");
-            return;
-        }
-
-        let csv = [];
-        if (table.tagName === 'TABLE') {
-            for (let i = 0; i < table.rows.length; i++) {
-                let row = [], cols = table.rows[i].querySelectorAll('td, th');
-                for (let j = 0; j < cols.length; j++) {
-                    let data = cols[j].innerText.replace(/"/g, '""').trim();
-                    row.push('"' + data + '"');
-                }
-                csv.push(row.join(','));
-            }
-        } else {
-            // Special handling for Div-based reports (Balance Sheet / Income Statement)
-            const rows = table.querySelectorAll('.bs-row, .is-row, .bs-section-title, .is-section-title, .bs-grand-total, .is-section-total, .is-net-bar, .bs-sub-label, .is-sub-label');
-            rows.forEach(r => {
-                let rowData = [];
-                if (r.classList.contains('bs-row') || r.classList.contains('is-row')) {
-                    const acctName = r.querySelector('.acct-name')?.innerText || '';
-                    const acctCode = r.querySelector('.account-code')?.innerText || '';
-                    const acctAmt = r.querySelector('.acct-amount')?.innerText || '';
-                    rowData.push('"' + (acctCode ? '['+acctCode+'] ' : '') + acctName.replace(/"/g, '""').trim() + '"');
-                    rowData.push('"' + acctAmt.replace(/"/g, '""').trim() + '"');
-                } else {
-                    // Header or Total line
-                    const text = r.innerText.replace(/\n/g, ' ').replace(/"/g, '""').trim();
-                    const parts = text.split(/\s{2,}/); // Try to split large spaces if any
-                    if (parts.length > 1) {
-                        rowData.push('"' + parts[0] + '"');
-                        rowData.push('"' + parts[parts.length-1] + '"');
-                    } else {
-                        rowData.push('"' + text + '"');
-                    }
-                }
-                if (rowData.length > 0) csv.push(rowData.join(','));
-            });
-        }
-        const csvString = csv.join('\n');
-        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const reportTitle = "<?php echo $report_title; ?>".replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        a.download = reportTitle + '_' + new Date().toISOString().split('T')[0] + '.csv';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-
-    function exportToPDF() {
-        const urlParams = new URLSearchParams({
-            type: document.getElementById('report_type_input').value,
-            start_date: document.querySelector('input[name="start_date"]').value,
-            end_date: document.querySelector('input[name="end_date"]').value
-        });
-        window.open('modules/export_financial_pdf.php?' + urlParams.toString(), '_blank');
-    }
-    </script>
-</body>
-</html>
-<?php 
-// Close connections
-if (isset($conn)) mysqli_close($conn); 
-?>

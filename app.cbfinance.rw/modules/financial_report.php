@@ -352,19 +352,6 @@ switch ($report_type) {
         foreach ($trial_data as &$account) {
             $first_digit = substr($account['account_code'], 0, 1);
             
-            // Override 4101 and 4201 with actual cash from loan_payments
-            if ($account['account_code'] === '4101') {
-                $q = "SELECT SUM(interest_amount) as total FROM loan_payments WHERE payment_date BETWEEN '$start_date' AND '$query_end_date'";
-                $res = mysqli_query($conn, $q);
-                $row = mysqli_fetch_assoc($res);
-                $account['closing_balance'] = -floatval($row['total'] ?? 0); // Negative because revenue is credit
-            } else if ($account['account_code'] === '4201') {
-                $q = "SELECT SUM(monitoring_fee) as total FROM loan_payments WHERE payment_date BETWEEN '$start_date' AND '$query_end_date'";
-                $res = mysqli_query($conn, $q);
-                $row = mysqli_fetch_assoc($res);
-                $account['closing_balance'] = -floatval($row['total'] ?? 0);
-            }
-
             // Only include income statement accounts
             if ($first_digit == '4' || $first_digit == '5' || $first_digit == '6') {
                 $report_data[] = $account;

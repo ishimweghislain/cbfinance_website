@@ -2,23 +2,17 @@
 require_once __DIR__ . '/app.cbfinance.rw/config/database.php';
 $conn = getConnection();
 
-// First aggregate loan_payments by loan_id (fast - no big join)
-$pay_sql = "
-    SELECT loan_id, 
-           SUM(interest_amount) AS interest_paid,
-           SUM(monitoring_fee) AS fee_paid
-    FROM loan_payments
-    GROUP BY loan_id
-";
-$pay_result = $conn->query($pay_sql);
-$payments = [];
-while ($p = $pay_result->fetch_assoc()) {
-    $payments[$p['loan_id']] = $p;
+// Fetch all ledger entries for 4101 and 4201
+$ledger_sql = "SELECT account_code, credit_amount, debit_amount, narration FROM ledger WHERE account_code IN ('4101', '4201')";
+$ledger_res = $conn->query($ledger_sql);
+$ledger_entries = [];
+while ($l = $ledger_res->fetch_assoc()) {
+    $ledger_entries[] = $l;
 }
 
 // Then get all loans
 $loan_sql = "
-    SELECT lp.loan_id, lp.loan_number, lp.loan_amount, lp.interest_rate, lp.management_fee_rate, lp.loan_status, c.customer_name
+    SELECT lp.loan_id, lp.loan_number, lp.loan_amount, lp.interest_rate, lp.management_fee_rate, lp.loan_status, c.customer_name, c.customer_id
     FROM loan_portfolio lp
     JOIN customers c ON lp.customer_id = c.customer_id
     ORDER BY lp.loan_number ASC
@@ -27,10 +21,27 @@ $loan_result = $conn->query($loan_sql);
 $rows = [];
 $total_interest = 0;
 $total_fee = 0;
+
 while ($loan = $loan_result->fetch_assoc()) {
-    $lid = $loan['loan_id'];
-    $interest = isset($payments[$lid]) ? floatval($payments[$lid]['interest_paid']) : 0;
-    $fee      = isset($payments[$lid]) ? floatval($payments[$lid]['fee_paid']) : 0;
+    $interest = 0;
+    $fee = 0;
+    $loan_number = $loan['loan_number'];
+    $customer_id = $loan['customer_id'];
+    
+    // Find all ledger entries that belong to this loan
+    foreach ($ledger_entries as $entry) {
+        $narration = $entry['narration'];
+        // Check if narration contains the exact loan number OR the exact customer ID (e.g., 'Accruals for C0060')
+        if (strpos($narration, $loan_number) !== false || preg_match('/\b' . preg_quote($customer_id, '/') . '\b/i', $narration)) {
+            $amount = floatval($entry['credit_amount']) - floatval($entry['debit_amount']);
+            if ($entry['account_code'] === '4101') {
+                $interest += $amount;
+            } elseif ($entry['account_code'] === '4201') {
+                $fee += $amount;
+            }
+        }
+    }
+    
     $loan['interest_paid'] = $interest;
     $loan['fee_paid']      = $fee;
     $rows[] = $loan;

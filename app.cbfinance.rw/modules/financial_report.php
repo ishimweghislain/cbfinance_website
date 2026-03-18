@@ -9,8 +9,8 @@ $conn = getConnection();
 $report_type = isset($_GET['type']) ? $_GET['type'] : 'trial_balance';
 
 // Handle date range filters
-$start_date = isset($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-01');
-$end_date = isset($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d');
+$start_date = !empty($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-01');
+$end_date = !empty($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d');
 $query_end_date = $end_date . ' 23:59:59';
 
 // Helper functions

@@ -12,7 +12,7 @@ while ($l = $ledger_res->fetch_assoc()) {
 
 // Then get all loans
 $loan_sql = "
-    SELECT lp.loan_id, lp.loan_number, lp.loan_amount, lp.interest_rate, lp.management_fee_rate, lp.loan_status, c.customer_name, c.customer_id
+    SELECT lp.loan_id, lp.loan_number, lp.loan_amount, lp.interest_rate, lp.management_fee_rate, lp.loan_status, c.customer_name, c.customer_code
     FROM loan_portfolio lp
     JOIN customers c ON lp.customer_id = c.customer_id
     ORDER BY lp.loan_number ASC
@@ -26,13 +26,13 @@ while ($loan = $loan_result->fetch_assoc()) {
     $interest = 0;
     $fee = 0;
     $loan_number = $loan['loan_number'];
-    $customer_id = $loan['customer_id'];
+    $customer_code = $loan['customer_code'];
     
     // Find all ledger entries that belong to this loan
     foreach ($ledger_entries as $entry) {
         $narration = $entry['narration'];
-        // Check if narration contains the exact loan number OR the exact customer ID (e.g., 'Accruals for C0060')
-        if (strpos($narration, $loan_number) !== false || preg_match('/\b' . preg_quote($customer_id, '/') . '\b/i', $narration)) {
+        // Check if narration contains the exact loan number OR the exact customer code (e.g., 'Accruals for C0060')
+        if (strpos($narration, $loan_number) !== false || (!empty($customer_code) && preg_match('/\b' . preg_quote($customer_code, '/') . '\b/i', $narration))) {
             $amount = floatval($entry['credit_amount']) - floatval($entry['debit_amount']);
             if ($entry['account_code'] === '4101') {
                 $interest += $amount;

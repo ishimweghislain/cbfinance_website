@@ -186,24 +186,60 @@ if (!$loans) {
 
 $active_group = "('Active','Performing','Overdue','Written-off')";
 
-// ── Summary stats for the current date range (used in cards) ──
-$stats_sql = "SELECT
-    COUNT(DISTINCT lp.loan_id) as total_loans,
-    SUM(lp.total_disbursed) as total_distributed,
-    COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
-        (SELECT SUM(GREATEST(0, principal_amount - principal_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)
-        ELSE 0 END), 0) as active_principal,
-    COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
-        (SELECT SUM(GREATEST(0, interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)
-        ELSE 0 END), 0) as active_interest,
-    COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
-        (SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)
-        ELSE 0 END), 0) as portfolio_value,
-    COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
-        (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())
-        ELSE 0 END), 0) as total_overdue
-    FROM loan_portfolio lp
-    WHERE lp.disbursement_date BETWEEN '$sd_esc' AND '$ed_esc'";
+// Build the WHERE clause for the metrics cards (matches the loan table filter)
+$metrics_where = "lp.disbursement_date BETWEEN '$sd_esc' AND '$ed_esc'";
+$is_active_group_filter = false; // whether the filter is within the active group
+
+if ($filter_status === 'paid') {
+    // Loans that have at least one fully-paid instalment
+    $metrics_where .= " AND (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND balance_remaining <= 0) > 0";
+} elseif ($filter_status === 'unpaid') {
+    // Loans that have at least one outstanding instalment
+    $metrics_where .= " AND (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND balance_remaining > 0) > 0";
+} elseif ($filter_status !== 'all' && !empty($filter_status)) {
+    $fs_esc = mysqli_real_escape_string($conn, $filter_status);
+    $metrics_where .= " AND lp.loan_status = '$fs_esc'";
+    // If the chosen status is in the active group, we sum directly (no CASE needed)
+    $active_statuses_list = ['Active','Performing','Overdue','Written-off'];
+    $is_active_group_filter = in_array($filter_status, $active_statuses_list);
+}
+
+// When filtering to a specific status that IS in the active group:
+// remove the CASE WHEN wrapper — just SUM directly because all rows qualify.
+// When filtering to a non-active status (e.g. Closed, Suspended):
+// Active principal/interest = 0 since the CASE excludes those rows.
+// When showing All: keep the CASE WHEN to only count active-group loans.
+if ($is_active_group_filter) {
+    // All filtered rows are active-group: sum directly
+    $stats_sql = "SELECT
+        COUNT(DISTINCT lp.loan_id) as total_loans,
+        SUM(lp.total_disbursed) as total_distributed,
+        COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as active_principal,
+        COALESCE(SUM((SELECT SUM(GREATEST(0, interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as active_interest,
+        COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as portfolio_value,
+        COALESCE(SUM((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())), 0) as total_overdue
+        FROM loan_portfolio lp
+        WHERE $metrics_where";
+} else {
+    // All status or non-active status: use CASE WHEN to gate active-group columns
+    $stats_sql = "SELECT
+        COUNT(DISTINCT lp.loan_id) as total_loans,
+        SUM(lp.total_disbursed) as total_distributed,
+        COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
+            (SELECT SUM(GREATEST(0, principal_amount - principal_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)
+            ELSE 0 END), 0) as active_principal,
+        COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
+            (SELECT SUM(GREATEST(0, interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)
+            ELSE 0 END), 0) as active_interest,
+        COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
+            (SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)
+            ELSE 0 END), 0) as portfolio_value,
+        COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
+            (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())
+            ELSE 0 END), 0) as total_overdue
+        FROM loan_portfolio lp
+        WHERE $metrics_where";
+}
 $stats = $conn->query($stats_sql)->fetch_assoc();
 $ps = $stats;
 

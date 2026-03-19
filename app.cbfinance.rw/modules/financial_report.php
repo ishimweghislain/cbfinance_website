@@ -92,12 +92,13 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
 
             if ($account_code === '4202') {
                 // Disbursement Fee (One-time, upfront) from loan_portfolio
-                $res_open = mysqli_query($conn, "SELECT SUM(management_fee_amount) as op FROM loan_portfolio WHERE disbursement_date < '$start_date'");
+                // Rule: Only counts if the very first instalment has a management fee = 0
+                $res_open = mysqli_query($conn, "SELECT SUM(management_fee_amount) as op FROM loan_portfolio lp WHERE disbursement_date < '$start_date' AND (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0");
                 if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
                     $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
                 }
                 
-                $res_move = mysqli_query($conn, "SELECT SUM(management_fee_amount) as mp FROM loan_portfolio WHERE disbursement_date BETWEEN '$start_date' AND '$query_end_date'");
+                $res_move = mysqli_query($conn, "SELECT SUM(management_fee_amount) as mp FROM loan_portfolio lp WHERE disbursement_date BETWEEN '$start_date' AND '$query_end_date' AND (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0");
                 if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
                     $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
                 }
@@ -442,7 +443,7 @@ switch ($report_type) {
             SUM(CASE WHEN p.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59' THEN p.interest_amount ELSE 0 END) as int_pd,
             SUM(CASE WHEN p.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59' THEN p.monitoring_fee ELSE 0 END) as mgmt_pd,
             SUM(CASE WHEN p.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59' THEN p.penalties ELSE 0 END) as pen_pd,
-            (SELECT SUM(lp2.management_fee_amount) FROM loan_portfolio lp2 WHERE lp2.customer_id = c.customer_id AND lp2.disbursement_date BETWEEN '$start_date' AND '$query_end_date') as disb_pd,
+            (SELECT SUM(lp2.management_fee_amount) FROM loan_portfolio lp2 WHERE lp2.customer_id = c.customer_id AND lp2.disbursement_date BETWEEN '$start_date' AND '$query_end_date' AND (SELECT management_fee FROM loan_instalments WHERE loan_id = lp2.loan_id AND instalment_number = 1 LIMIT 1) = 0) as disb_pd,
             (SELECT SUM(af.amount) FROM application_fees af WHERE af.customer_id = c.customer_id AND af.status = 'Paid' AND af.transaction_date BETWEEN '$start_date' AND '$query_end_date') as app_pd,
             COALESCE((SELECT lp3.interest_outstanding FROM loan_portfolio lp3 WHERE lp3.customer_id = c.customer_id AND lp3.loan_status != 'Closed' ORDER BY lp3.loan_id DESC LIMIT 1), 0) as int_bal,
             COALESCE((SELECT lp3.principal_outstanding FROM loan_portfolio lp3 WHERE lp3.customer_id = c.customer_id AND lp3.loan_status != 'Closed' ORDER BY lp3.loan_id DESC LIMIT 1), 0) as princ_bal,
@@ -496,11 +497,14 @@ switch ($report_type) {
             SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.interest_paid ELSE 0 END) as period_interest_paid,
             SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.management_fee_paid ELSE 0 END) as period_fee_paid,
             SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.penalty_paid ELSE 0 END) as period_penalty_paid,
-            -- Disbursement Management Fee: charged at loan start (from loan_portfolio)
-            -- Period disbursement: loans whose disbursement_date falls in the selected period
-            CASE WHEN lp.disbursement_date BETWEEN '$start_date' AND '$query_end_date' THEN lp.management_fee_amount ELSE 0 END as disb_fee_period,
-            -- All-time disbursement fee for this loan
-            lp.management_fee_amount as total_disb_fee,
+            -- Disbursement Management Fee: charged at loan start ONLY IF instalment 1 mgmt fee is 0
+            CASE WHEN (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0 THEN 
+                 (CASE WHEN lp.disbursement_date BETWEEN '$start_date' AND '$query_end_date' THEN lp.management_fee_amount ELSE 0 END)
+            ELSE 0 END as disb_fee_period,
+            -- All-time disbursement fee for this loan ONLY IF instalment 1 mgmt fee is 0
+            CASE WHEN (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0 THEN 
+                 lp.management_fee_amount
+            ELSE 0 END as total_disb_fee,
             -- Totals to date (all payments ever made on this loan)
             SUM(li.interest_paid) as total_interest_paid,
             SUM(li.management_fee_paid) as total_fee_paid,

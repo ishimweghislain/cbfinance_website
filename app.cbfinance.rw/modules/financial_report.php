@@ -102,19 +102,20 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
                     $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
                 }
             } else {
-                // Accounts from loan_instalments (Interest 4101, Periodic Mgmt Fee 4201, Penalties 4205)
-                $col_paid = '';
-                if ($account_code === '4101') $col_paid = 'interest_paid';
-                elseif ($account_code === '4201') $col_paid = 'management_fee_paid';
-                elseif ($account_code === '4205') $col_paid = 'penalty_paid';
+                // Accounts from loan_payments table (more accurate than installments which can have duplicates)
+                // Interest 4101, Periodic Mgmt Fee 4201, Penalties 4205
+                $col_source = '';
+                if ($account_code === '4101') $col_source = 'interest_amount';
+                elseif ($account_code === '4201') $col_source = 'monitoring_fee';
+                elseif ($account_code === '4205') $col_source = 'penalties';
                 
-                if ($col_paid) {
-                    $res_open = mysqli_query($conn, "SELECT SUM($col_paid) as op FROM loan_instalments WHERE payment_date < '$start_date'");
+                if ($col_source) {
+                    $res_open = mysqli_query($conn, "SELECT SUM($col_source) as op FROM loan_payments WHERE payment_date < '$start_date 00:00:00'");
                     if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
                         $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
                     }
                     
-                    $res_move = mysqli_query($conn, "SELECT SUM($col_paid) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date' AND '$query_end_date'");
+                    $res_move = mysqli_query($conn, "SELECT SUM($col_source) as mp FROM loan_payments WHERE payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'");
                     if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
                         $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
                     }
@@ -433,18 +434,22 @@ switch ($report_type) {
         $report_title = "Income Statement";
         
         // Fetch ALL customers and their consolidated revenue activity in the period (Unified Table)
+        // Using loan_payments table to match ledger totals exactly
         $unified_revenue = [];
         $sql_unified = "SELECT 
             c.customer_id, 
             c.customer_name,
-            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.interest_paid ELSE 0 END) as int_pd,
-            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.management_fee_paid ELSE 0 END) as mgmt_pd,
-            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.penalty_paid ELSE 0 END) as pen_pd,
+            SUM(CASE WHEN p.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59' THEN p.interest_amount ELSE 0 END) as int_pd,
+            SUM(CASE WHEN p.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59' THEN p.monitoring_fee ELSE 0 END) as mgmt_pd,
+            SUM(CASE WHEN p.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59' THEN p.penalties ELSE 0 END) as pen_pd,
             (SELECT SUM(lp2.management_fee_amount) FROM loan_portfolio lp2 WHERE lp2.customer_id = c.customer_id AND lp2.disbursement_date BETWEEN '$start_date' AND '$query_end_date') as disb_pd,
-            (SELECT SUM(af.amount) FROM application_fees af WHERE af.customer_id = c.customer_id AND af.status = 'Paid' AND af.transaction_date BETWEEN '$start_date' AND '$query_end_date') as app_pd
+            (SELECT SUM(af.amount) FROM application_fees af WHERE af.customer_id = c.customer_id AND af.status = 'Paid' AND af.transaction_date BETWEEN '$start_date' AND '$query_end_date') as app_pd,
+            COALESCE((SELECT lp3.interest_outstanding FROM loan_portfolio lp3 WHERE lp3.customer_id = c.customer_id AND lp3.loan_status != 'Closed' ORDER BY lp3.loan_id DESC LIMIT 1), 0) as int_bal,
+            COALESCE((SELECT lp3.principal_outstanding FROM loan_portfolio lp3 WHERE lp3.customer_id = c.customer_id AND lp3.loan_status != 'Closed' ORDER BY lp3.loan_id DESC LIMIT 1), 0) as princ_bal,
+            COALESCE((SELECT lp3.management_fee_amount - lp3.total_management_fees_paid FROM loan_portfolio lp3 WHERE lp3.customer_id = c.customer_id AND lp3.loan_status != 'Closed' ORDER BY lp3.loan_id DESC LIMIT 1), 0) as mgmt_bal
             FROM customers c
             LEFT JOIN loan_portfolio lp ON c.customer_id = lp.customer_id
-            LEFT JOIN loan_instalments li ON lp.loan_id = li.loan_id
+            LEFT JOIN loan_payments p ON lp.loan_id = p.loan_id
             GROUP BY c.customer_id
             ORDER BY c.customer_name";
             
@@ -1422,16 +1427,24 @@ switch ($report_type) {
                                         
                                         <div id="unifiedBreakdown" style="display: none;">
                                             <div class="table-responsive">
-                                                <table class="table table-sm table-hover border" style="font-size: 0.75rem;">
+                                                <table class="table table-sm table-hover border" style="font-size: 0.7rem;">
                                                     <thead class="table-dark">
                                                         <tr>
                                                             <th>Customer Name</th>
+                                                            <th class="text-center bg-primary" colspan="5">PAID IN SELECTED PERIOD</th>
+                                                            <th class="text-center bg-secondary" colspan="2">OUTSTANDING BALANCE</th>
+                                                            <th class="text-end fw-bold">Grand Total</th>
+                                                        </tr>
+                                                        <tr style="font-size: 0.65rem;">
+                                                            <th></th>
                                                             <th class="text-end">Interest</th>
-                                                            <th class="text-end">Mgmt Fee</th>
+                                                            <th class="text-end">Periodic Mgmt</th>
                                                             <th class="text-end">Disbursement</th>
                                                             <th class="text-end">App Fee</th>
                                                             <th class="text-end">Penalties</th>
-                                                            <th class="text-end fw-bold">Total</th>
+                                                            <th class="text-end text-danger">Int. Left</th>
+                                                            <th class="text-end text-danger">Principal</th>
+                                                            <th class="text-end fw-bold">Period Total</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -1449,6 +1462,8 @@ switch ($report_type) {
                                                             <td class="text-end"><?php echo formatMoney($r['disb_pd']); ?></td>
                                                             <td class="text-end"><?php echo formatMoney($r['app_pd']); ?></td>
                                                             <td class="text-end"><?php echo formatMoney($r['pen_pd']); ?></td>
+                                                            <td class="text-end text-danger"><?php echo formatMoney($r['int_bal']); ?></td>
+                                                            <td class="text-end text-danger"><?php echo formatMoney($r['princ_bal']); ?></td>
                                                             <td class="text-end fw-bold"><?php echo formatMoney($row_total); ?></td>
                                                         </tr>
                                                         <?php endforeach; ?>
@@ -1461,13 +1476,17 @@ switch ($report_type) {
                                                             <td class="text-end"><?php echo formatMoney($gt_disb); ?></td>
                                                             <td class="text-end"><?php echo formatMoney($gt_app); ?></td>
                                                             <td class="text-end"><?php echo formatMoney($gt_pen); ?></td>
-                                                            <td class="text-end"><?php echo formatMoney($gt_total); ?></td>
+                                                            <td class="text-end" colspan="2">--</td>
+                                                            <td class="text-end fw-bold"><?php echo formatMoney($gt_total); ?></td>
                                                         </tr>
                                                     </tfoot>
                                                 </table>
                                             </div>
-                                            <div class="alert alert-warning py-1 px-2 mt-2" style="font-size: 0.7rem;">
-                                                <i class="fas fa-info-circle me-1"></i> Use this list to verify that the sum of all customer payments matches the total reported above.
+                                        </div>
+                                    </div>
+                                    <!-- End Unified Revenue Breakdown -->
+                                            <div class="alert alert-info py-1 px-2 mt-2 mb-0" style="font-size: 0.65rem;">
+                                                <i class="fas fa-info-circle me-1"></i> <strong>Note:</strong> "Paid in Period" sums amounts from the <code>loan_payments</code> table for the selected range. "Outstanding Balance" shows current active loan balances.
                                             </div>
                                         </div>
                                     </div>

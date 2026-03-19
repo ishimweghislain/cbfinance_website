@@ -626,7 +626,7 @@ $filtered_loan_count = ($filter_status == 'all') ? $total_all_loans : ($status_c
                             <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i></button>
                         </form>
                         <a href="?page=applicationfees" class="btn btn-sm btn-outline-primary">App Fees</a>
-                        <a href="?page=createloan" class="btn btn-sm btn-success"><i class="bi bi-plus-lg"></i> New</a>
+                        <a href="?page=addloan" class="btn btn-sm btn-success"><i class="bi bi-plus-lg"></i> New</a>
                     </div>
                 </div>
                 <?php if ($filter_status !== 'all'): ?>

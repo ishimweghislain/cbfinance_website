@@ -102,6 +102,7 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
                 if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
                     $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
                 }
+            } else {
                 // Accounts from loan_instalments table
                 // Interest 4101, Periodic Mgmt Fee 4201, Penalties 4205
                 // USE CAPPED LOGIC: For fully paid instalments, use the exact expected amount to match UI schedule and ignore garbage overpayments.

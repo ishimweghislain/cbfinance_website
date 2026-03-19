@@ -102,21 +102,21 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
                 if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
                     $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
                 }
-            } else {
-                // Accounts from loan_payments table (more accurate than installments which can have duplicates)
+                // Accounts from loan_instalments table
                 // Interest 4101, Periodic Mgmt Fee 4201, Penalties 4205
-                $col_source = '';
-                if ($account_code === '4101') $col_source = 'interest_amount';
-                elseif ($account_code === '4201') $col_source = 'monitoring_fee';
-                elseif ($account_code === '4205') $col_source = 'penalties';
+                // USE CAPPED LOGIC: For fully paid instalments, use the exact expected amount to match UI schedule and ignore garbage overpayments.
+                $exp_col = ''; $paid_col = '';
+                if ($account_code === '4101') { $exp_col = 'interest_amount'; $paid_col = 'interest_paid'; }
+                elseif ($account_code === '4201') { $exp_col = 'management_fee'; $paid_col = 'management_fee_paid'; }
+                elseif ($account_code === '4205') { $exp_col = 'penalty_amount'; $paid_col = 'penalty_paid'; }
                 
-                if ($col_source) {
-                    $res_open = mysqli_query($conn, "SELECT SUM($col_source) as op FROM loan_payments WHERE payment_date < '$start_date 00:00:00'");
+                if ($exp_col) {
+                    $res_open = mysqli_query($conn, "SELECT SUM(CASE WHEN balance_remaining <= 0 THEN $exp_col ELSE $paid_col END) as op FROM loan_instalments WHERE payment_date < '$start_date 00:00:00'");
                     if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
                         $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
                     }
                     
-                    $res_move = mysqli_query($conn, "SELECT SUM($col_source) as mp FROM loan_payments WHERE payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'");
+                    $res_move = mysqli_query($conn, "SELECT SUM(CASE WHEN balance_remaining <= 0 THEN $exp_col ELSE $paid_col END) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'");
                     if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
                         $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
                     }
@@ -440,9 +440,9 @@ switch ($report_type) {
         $sql_unified = "SELECT 
             c.customer_id, 
             c.customer_name,
-            SUM(CASE WHEN p.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59' THEN p.interest_amount ELSE 0 END) as int_pd,
-            SUM(CASE WHEN p.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59' THEN p.monitoring_fee ELSE 0 END) as mgmt_pd,
-            SUM(CASE WHEN p.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59' THEN p.penalties ELSE 0 END) as pen_pd,
+            (SELECT SUM(CASE WHEN balance_remaining <= 0 THEN interest_amount ELSE interest_paid END) FROM loan_instalments WHERE loan_id IN (SELECT loan_id FROM loan_portfolio WHERE customer_id = c.customer_id) AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59') as int_pd,
+            (SELECT SUM(CASE WHEN balance_remaining <= 0 THEN management_fee ELSE management_fee_paid END) FROM loan_instalments WHERE loan_id IN (SELECT loan_id FROM loan_portfolio WHERE customer_id = c.customer_id) AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59') as mgmt_pd,
+            (SELECT SUM(CASE WHEN balance_remaining <= 0 THEN penalty_amount ELSE penalty_paid END) FROM loan_instalments WHERE loan_id IN (SELECT loan_id FROM loan_portfolio WHERE customer_id = c.customer_id) AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59') as pen_pd,
             (SELECT SUM(lp2.management_fee_amount) FROM loan_portfolio lp2 WHERE lp2.customer_id = c.customer_id AND lp2.disbursement_date BETWEEN '$start_date' AND '$query_end_date' AND (SELECT management_fee FROM loan_instalments WHERE loan_id = lp2.loan_id AND instalment_number = 1 LIMIT 1) = 0) as disb_pd,
             (SELECT SUM(af.amount) FROM application_fees af WHERE af.customer_id = c.customer_id AND af.status = 'Paid' AND af.transaction_date BETWEEN '$start_date' AND '$query_end_date') as app_pd,
             COALESCE((SELECT lp3.interest_outstanding FROM loan_portfolio lp3 WHERE lp3.customer_id = c.customer_id AND lp3.loan_status != 'Closed' ORDER BY lp3.loan_id DESC LIMIT 1), 0) as int_bal,
@@ -496,10 +496,18 @@ switch ($report_type) {
             lp.loan_number, 
             c.customer_name,
             
-            -- Paid during the selected period (from loan_payments - SOURCE OF TRUTH)
-            COALESCE((SELECT SUM(interest_amount) FROM loan_payments WHERE loan_id = lp.loan_id AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'), 0) as period_interest_paid,
-            COALESCE((SELECT SUM(monitoring_fee) FROM loan_payments WHERE loan_id = lp.loan_id AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'), 0) as period_fee_paid,
-            COALESCE((SELECT SUM(penalties) FROM loan_payments WHERE loan_id = lp.loan_id AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'), 0) as period_penalty_paid,
+            -- Paid during the selected period (CAPPED to expected if fully paid)
+            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN 
+                 (CASE WHEN li.balance_remaining <= 0 THEN li.interest_amount ELSE li.interest_paid END)
+            ELSE 0 END) as period_interest_paid,
+            
+            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN 
+                 (CASE WHEN li.balance_remaining <= 0 THEN li.management_fee ELSE li.management_fee_paid END)
+            ELSE 0 END) as period_fee_paid,
+            
+            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN 
+                 (CASE WHEN li.balance_remaining <= 0 THEN li.penalty_amount ELSE li.penalty_paid END)
+            ELSE 0 END) as period_penalty_paid,
             
             -- Disbursement Management Fee: ONLY if instalment 1 mgmt fee is 0
             CASE WHEN (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0 THEN 
@@ -510,20 +518,20 @@ switch ($report_type) {
                  lp.management_fee_amount
             ELSE 0 END as total_disb_fee,
             
-            -- Totals to date (all payments EVER made on this loan)
-            COALESCE((SELECT SUM(interest_amount) FROM loan_payments WHERE loan_id = lp.loan_id), 0) as total_interest_paid,
-            COALESCE((SELECT SUM(monitoring_fee) FROM loan_payments WHERE loan_id = lp.loan_id), 0) as total_fee_paid,
-            COALESCE((SELECT SUM(penalties) FROM loan_payments WHERE loan_id = lp.loan_id), 0) as total_penalty_paid,
+            -- Totals to date (all payments EVER made on this loan, capped if fully paid)
+            SUM(CASE WHEN li.balance_remaining <= 0 THEN li.interest_amount ELSE li.interest_paid END) as total_interest_paid,
+            SUM(CASE WHEN li.balance_remaining <= 0 THEN li.management_fee ELSE li.management_fee_paid END) as total_fee_paid,
+            SUM(CASE WHEN li.balance_remaining <= 0 THEN li.penalty_amount ELSE li.penalty_paid END) as total_penalty_paid,
             
             -- Total expected for comparison
-            COALESCE((SELECT SUM(interest_amount) FROM loan_instalments WHERE loan_id = lp.loan_id), 0) as total_interest_exp,
-            COALESCE((SELECT SUM(management_fee) FROM loan_instalments WHERE loan_id = lp.loan_id), 0) as total_fee_exp,
-            COALESCE((SELECT SUM(penalty_amount) FROM loan_instalments WHERE loan_id = lp.loan_id), 0) as total_penalty_exp
+            SUM(li.interest_amount) as total_interest_exp,
+            SUM(li.management_fee) as total_fee_exp,
+            SUM(li.penalty_amount) as total_penalty_exp
             
             FROM loan_portfolio lp
             JOIN customers c ON lp.customer_id = c.customer_id
-            -- only fetch loans that have some valid payment or instalment activity
-            WHERE EXISTS (SELECT 1 FROM loan_instalments WHERE loan_id = lp.loan_id)
+            JOIN loan_instalments li ON lp.loan_id = li.loan_id
+            GROUP BY lp.loan_id
             ORDER BY c.customer_name";
             
         $analysis_res = mysqli_query($conn, $analysis_sql);

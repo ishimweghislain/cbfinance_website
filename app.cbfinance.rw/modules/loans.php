@@ -126,11 +126,16 @@ if (isset($_GET['error']) && $_GET['error'] == 'delete_failed') {
 
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $filter_status = isset($_GET['status']) ? $_GET['status'] : 'all';
+$start_date = isset($_GET['start_date']) && !empty($_GET['start_date']) ? $_GET['start_date'] : '2025-01-01';
+$end_date   = isset($_GET['end_date'])   && !empty($_GET['end_date'])   ? $_GET['end_date']   : date('Y-m-d');
+$sd_esc = mysqli_real_escape_string($conn, $start_date);
+$ed_esc = mysqli_real_escape_string($conn, $end_date);
 
 $query = "SELECT lp.*, c.customer_name, c.customer_code 
           FROM loan_portfolio lp 
           LEFT JOIN customers c ON lp.customer_id = c.customer_id 
-          WHERE 1=1";
+          WHERE lp.disbursement_date BETWEEN '$sd_esc' AND '$ed_esc'";
+
 
 $params = [];
 $types = "";
@@ -142,7 +147,12 @@ if (!empty($search)) {
     $types .= "sss";
 }
 
-if (!empty($filter_status) && $filter_status != 'all') {
+// Handle instalment-level filters (paid/unpaid) — these need a subquery
+if ($filter_status === 'paid') {
+    $query .= " AND (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND balance_remaining <= 0) > 0";
+} elseif ($filter_status === 'unpaid') {
+    $query .= " AND (SELECT COUNT(*) FROM loan_instalments WHERE loan_id = lp.loan_id AND balance_remaining > 0) > 0";
+} elseif (!empty($filter_status) && $filter_status !== 'all') {
     $query .= " AND lp.loan_status = ?";
     $params[] = $filter_status;
     $types .= "s";
@@ -169,16 +179,38 @@ if (!$loans) {
 }
 
 // ================================================
-// UNIFIED PORTFOLIO METRICS — per status, using loan_portfolio columns
-// (principal_outstanding, interest_outstanding, total_outstanding are
-//  maintained by the system and match what financial_report.php uses)
+// UNIFIED PORTFOLIO METRICS — exactly matching reports.php buildSummaryQuery
+// Active group = 'Active','Performing','Overdue','Written-off'
+// All numbers from loan_instalments GREATEST(0, ...) — same as reports
 // ================================================
 
-// --- 1. Count loans per status ---
+$active_group = "('Active','Performing','Overdue','Written-off')";
+
+// ── Summary stats for the current date range (used in cards) ──
+$stats_sql = "SELECT
+    COUNT(DISTINCT lp.loan_id) as total_loans,
+    SUM(lp.total_disbursed) as total_distributed,
+    COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
+        (SELECT SUM(GREATEST(0, principal_amount - principal_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)
+        ELSE 0 END), 0) as active_principal,
+    COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
+        (SELECT SUM(GREATEST(0, interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)
+        ELSE 0 END), 0) as active_interest,
+    COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
+        (SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)
+        ELSE 0 END), 0) as portfolio_value,
+    COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
+        (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())
+        ELSE 0 END), 0) as total_overdue
+    FROM loan_portfolio lp
+    WHERE lp.disbursement_date BETWEEN '$sd_esc' AND '$ed_esc'";
+$stats = $conn->query($stats_sql)->fetch_assoc();
+$ps = $stats;
+
+// ── Status counts (all-time, no date filter) ──
 $status_counts = [];
 $all_statuses_list = ['Active','Closed','Written-off','Defaulted','Pending','Overdue','Suspended'];
 foreach ($all_statuses_list as $s) $status_counts[$s] = 0;
-
 $count_res = $conn->query("SELECT loan_status, COUNT(*) as cnt FROM loan_portfolio GROUP BY loan_status");
 if ($count_res) {
     while ($cr = $count_res->fetch_assoc()) {
@@ -191,40 +223,12 @@ $total_closed      = $status_counts['Closed'];
 $total_written_off = $status_counts['Written-off'];
 $total_defaulted   = $status_counts['Defaulted'];
 
-// --- 2. Pre-compute metrics per status for instant JS toggling ---
-// Uses loan_portfolio columns directly — same source as financial_report.php
-$metrics_by_status = [];
-$metrics_sql = "SELECT 
-    loan_status,
-    COALESCE(SUM(total_disbursed), 0)           AS total_distributed,
-    COALESCE(SUM(GREATEST(0, principal_outstanding)), 0) AS active_principal,
-    COALESCE(SUM(GREATEST(0, interest_outstanding)), 0)  AS active_interest,
-    COALESCE(SUM(GREATEST(0, total_outstanding)), 0)     AS portfolio_value,
-    COALESCE(SUM(penalties), 0)                 AS total_overdue
-    FROM loan_portfolio
-    GROUP BY loan_status";
-$mres = $conn->query($metrics_sql);
-if ($mres) {
-    while ($mr = $mres->fetch_assoc()) {
-        $metrics_by_status[$mr['loan_status']] = $mr;
-    }
-}
-// ALL (aggregate)
-$all_sql = "SELECT
-    COALESCE(SUM(total_disbursed), 0)           AS total_distributed,
-    COALESCE(SUM(GREATEST(0, principal_outstanding)), 0) AS active_principal,
-    COALESCE(SUM(GREATEST(0, interest_outstanding)), 0)  AS active_interest,
-    COALESCE(SUM(GREATEST(0, total_outstanding)), 0)     AS portfolio_value,
-    COALESCE(SUM(penalties), 0)                 AS total_overdue
-    FROM loan_portfolio";
-$all_res = $conn->query($all_sql);
-$metrics_all = $all_res ? $all_res->fetch_assoc() : ['total_distributed'=>0,'active_principal'=>0,'active_interest'=>0,'portfolio_value'=>0,'total_overdue'=>0];
-$metrics_by_status['all'] = $metrics_all;
-
-// --- 3. Choose metrics for current view ---
-$ps = $metrics_by_status[$filter_status] ?? $metrics_all;
+// Paid/Unpaid instalment counts (for badge display)
+$paid_count   = (int)($conn->query("SELECT COUNT(DISTINCT loan_id) FROM loan_instalments WHERE balance_remaining <= 0")->fetch_row()[0] ?? 0);
+$unpaid_count = (int)($conn->query("SELECT COUNT(DISTINCT loan_id) FROM loan_instalments WHERE balance_remaining > 0")->fetch_row()[0] ?? 0);
 
 $filtered_loan_count = ($filter_status == 'all') ? $total_all_loans : ($status_counts[$filter_status] ?? 0);
+
 ?>
 
 <style>
@@ -456,65 +460,85 @@ $filtered_loan_count = ($filter_status == 'all') ? $total_all_loans : ($status_c
 <?php endif; ?>
 
 <!-- ============================================================
-     PORTFOLIO SUMMARY CARDS — update instantly on status filter
-     data-metrics on each filter btn drives the JS update
+     PORTFOLIO SUMMARY CARDS — match reports.php exactly
+     Same active group: Active, Performing, Overdue, Written-off
+     Date filter shows metrics for selected date range
      ============================================================ -->
-<?php
-// The current metrics for the selected filter
-$current_label = ($filter_status == 'all') ? 'All Loans' : $filter_status;
-?>
-<div class="mb-2 d-flex align-items-center gap-2">
-    <span class="badge bg-primary fs-6" id="current-filter-label"><?php echo htmlspecialchars($current_label); ?></span>
-    <small class="text-muted">— Summary cards reflect the selected status filter below</small>
+
+<!-- Date Filter Banner -->
+<div class="card mb-3 border-0 shadow-sm">
+    <div class="card-body p-2">
+        <form method="GET" action="" class="d-flex flex-wrap align-items-end gap-2" id="dateFilterForm">
+            <input type="hidden" name="page" value="loans">
+            <?php if ($filter_status !== 'all'): ?>
+            <input type="hidden" name="status" value="<?php echo htmlspecialchars($filter_status); ?>">
+            <?php endif; ?>
+            <?php if (!empty($search)): ?>
+            <input type="hidden" name="search" value="<?php echo htmlspecialchars($search); ?>">
+            <?php endif; ?>
+            <div>
+                <label class="form-label mb-0 fw-semibold" style="font-size:0.75rem;">Start Date</label>
+                <input type="date" name="start_date" class="form-control form-control-sm" value="<?php echo htmlspecialchars($start_date); ?>">
+            </div>
+            <div>
+                <label class="form-label mb-0 fw-semibold" style="font-size:0.75rem;">End Date</label>
+                <input type="date" name="end_date" class="form-control form-control-sm" value="<?php echo htmlspecialchars($end_date); ?>">
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary align-self-end"><i class="bi bi-funnel"></i> Filter</button>
+            <a href="?page=loans" class="btn btn-sm btn-outline-secondary align-self-end">Reset</a>
+            <div class="ms-2 align-self-end" style="font-size:0.75rem;color:#888;">Showing loans disbursed: <strong><?php echo date('d M Y', strtotime($start_date)); ?></strong> – <strong><?php echo date('d M Y', strtotime($end_date)); ?></strong></div>
+        </form>
+    </div>
 </div>
+
 <div class="row mb-2 g-2" id="metrics-cards">
     <!-- Card 1: Total Distributed -->
     <div class="col">
-        <div class="card border-start border-4 border-primary h-100 shadow-sm" style="border-radius:0.5rem;">
+        <div class="card border-start border-4 border-primary h-100 shadow-sm">
             <div class="card-body py-2 px-3">
-                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;">Total Distributed</div>
-                <div class="fw-bold mt-1" id="card-distributed" style="font-size:1.1rem;"><?php echo number_format($ps['total_distributed'], 2); ?></div>
-                <div class="text-muted" style="font-size:0.7rem;">Disbursement total</div>
+                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;">Total Distributed</div>
+                <div class="fw-bold mt-1" id="card-distributed" style="font-size:1.05rem;"><?php echo number_format($ps['total_distributed'], 2); ?></div>
+                <div class="text-muted" style="font-size:0.7rem;">Global disbursement</div>
             </div>
         </div>
     </div>
     <!-- Card 2: Active Principal -->
     <div class="col">
-        <div class="card border-start border-4 border-success h-100 shadow-sm" style="border-radius:0.5rem;">
+        <div class="card border-start border-4 border-success h-100 shadow-sm">
             <div class="card-body py-2 px-3">
-                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;">Principal Outstanding</div>
-                <div class="fw-bold mt-1" id="card-principal" style="font-size:1.1rem;"><?php echo number_format($ps['active_principal'], 2); ?></div>
-                <div class="text-muted" style="font-size:0.7rem;">Remaining capital</div>
+                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;">Active Principal</div>
+                <div class="fw-bold mt-1" id="card-principal" style="font-size:1.05rem;"><?php echo number_format($ps['active_principal'], 2); ?></div>
+                <div class="text-muted" style="font-size:0.7rem;">Outstanding principal</div>
             </div>
         </div>
     </div>
     <!-- Card 3: Active Interest -->
     <div class="col">
-        <div class="card border-start border-4 border-info h-100 shadow-sm" style="border-radius:0.5rem;">
+        <div class="card border-start border-4 border-info h-100 shadow-sm">
             <div class="card-body py-2 px-3">
-                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;">Interest Outstanding</div>
-                <div class="fw-bold mt-1" id="card-interest" style="font-size:1.1rem;"><?php echo number_format($ps['active_interest'], 2); ?></div>
-                <div class="text-muted" style="font-size:0.7rem;">Expected unearned</div>
+                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;">Active Interest</div>
+                <div class="fw-bold mt-1" id="card-interest" style="font-size:1.05rem;"><?php echo number_format($ps['active_interest'], 2); ?></div>
+                <div class="text-muted" style="font-size:0.7rem;">Expected interest</div>
             </div>
         </div>
     </div>
     <!-- Card 4: Portfolio Value (P+I) -->
     <div class="col">
-        <div class="card border-start border-4 border-warning h-100 shadow-sm" style="border-radius:0.5rem;">
+        <div class="card border-start border-4 border-warning h-100 shadow-sm">
             <div class="card-body py-2 px-3">
-                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;">Portfolio Value (P+I)</div>
-                <div class="fw-bold mt-1" id="card-portfolio" style="font-size:1.1rem;"><?php echo number_format($ps['portfolio_value'], 2); ?></div>
-                <div class="text-muted" style="font-size:0.7rem;">Total outstanding</div>
+                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;">Portfolio Value (P+I)</div>
+                <div class="fw-bold mt-1" id="card-portfolio" style="font-size:1.05rem;"><?php echo number_format($ps['portfolio_value'], 2); ?></div>
+                <div class="text-muted" style="font-size:0.7rem;">Total remaining balance</div>
             </div>
         </div>
     </div>
-    <!-- Card 5: Accrued Penalties -->
+    <!-- Card 5: Total Overdue -->
     <div class="col">
-        <div class="card border-start border-4 border-danger h-100 shadow-sm" style="border-radius:0.5rem;">
+        <div class="card border-start border-4 border-danger h-100 shadow-sm">
             <div class="card-body py-2 px-3">
-                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;">Accrued Penalties</div>
-                <div class="fw-bold mt-1 text-danger" id="card-overdue" style="font-size:1.1rem;"><?php echo number_format($ps['total_overdue'], 2); ?></div>
-                <div class="text-muted" style="font-size:0.7rem;">Late payment charges</div>
+                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;">Total Overdue</div>
+                <div class="fw-bold mt-1 text-danger" id="card-overdue" style="font-size:1.05rem;"><?php echo number_format($ps['total_overdue'], 2); ?></div>
+                <div class="text-muted" style="font-size:0.7rem;">Due &amp; unpaid instalments</div>
             </div>
         </div>
     </div>
@@ -525,58 +549,55 @@ $current_label = ($filter_status == 'all') ? 'All Loans' : $filter_status;
     <div class="col-12">
         <div class="card shadow-sm border-0">
             <div class="card-body p-2">
-                <div class="d-flex flex-wrap align-items-center gap-1 mb-2">
-                    <strong class="me-1 small text-muted text-uppercase">Filter by Status:</strong>
+                <div class="d-flex flex-wrap align-items-center gap-1 mb-1">
+                    <strong class="me-1 small text-muted text-uppercase">Status:</strong>
                     <?php
+                    // Statuses matching reports.php exactly
                     $btn_defs = [
-                        'all'         => ['label' => 'All',         'color' => 'primary',   'count' => $total_all_loans],
-                        'Active'      => ['label' => 'Active',      'color' => 'success',   'count' => $status_counts['Active']],
-                        'Pending'     => ['label' => 'Pending',     'color' => 'warning',   'count' => $status_counts['Pending']],
-                        'Overdue'     => ['label' => 'Overdue',     'color' => 'orange',    'count' => $status_counts['Overdue']],
-                        'Defaulted'   => ['label' => 'Defaulted',   'color' => 'dark',      'count' => $status_counts['Defaulted']],
-                        'Suspended'   => ['label' => 'Suspended',   'color' => 'secondary', 'count' => $status_counts['Suspended']],
-                        'Written-off' => ['label' => 'Written-off', 'color' => 'danger',    'count' => $status_counts['Written-off']],
-                        'Closed'      => ['label' => 'Closed',      'color' => 'info',      'count' => $status_counts['Closed']],
+                        'all'     => ['label' => 'All Status',          'color' => 'primary',   'count' => $total_all_loans],
+                        'Active'  => ['label' => 'Active',              'color' => 'success',   'count' => $status_counts['Active']],
+                        'Overdue' => ['label' => 'Overdue',             'color' => 'danger',    'count' => $status_counts['Overdue']],
+                        'Suspended'   => ['label' => 'Suspended',       'color' => 'secondary', 'count' => $status_counts['Suspended']],
+                        'Closed'  => ['label' => 'Closed',              'color' => 'warning',   'count' => $status_counts['Closed']],
+                        'paid'    => ['label' => 'Paid (Instalments)',  'color' => 'info',      'count' => $paid_count],
+                        'unpaid'  => ['label' => 'Unpaid (Instalments)','color' => 'dark',      'count' => $unpaid_count],
                     ];
                     foreach ($btn_defs as $status_key => $btn):
                         $is_active = ($filter_status == $status_key);
                         $color = $btn['color'];
-                        $btn_class = $is_active ? "btn-$color" : "btn-outline-$color";
-                        $href = "?page=loans&status=" . urlencode($status_key) . (!empty($search) ? '&search='.urlencode($search) : '');
+                        $btn_class = $is_active ? "btn-{$color}" : "btn-outline-{$color}";
+                        $href = "?page=loans&status=" . urlencode($status_key)
+                              . "&start_date=" . urlencode($start_date)
+                              . "&end_date=" . urlencode($end_date)
+                              . (!empty($search) ? '&search='.urlencode($search) : '');
                     ?>
                     <a href="<?php echo $href; ?>"
-                       class="btn btn-sm <?php echo $btn_class; ?> status-filter-btn"
-                       data-status="<?php echo htmlspecialchars($status_key); ?>"
-                       data-metrics='<?php echo htmlspecialchars(json_encode($metrics_by_status[$status_key] ?? $metrics_all)); ?>'>
+                       class="btn btn-sm <?php echo $btn_class; ?>"
+                       title="<?php echo htmlspecialchars($btn['label']); ?>">
                         <?php echo $btn['label']; ?>
-                        <span class="badge bg-white text-dark ms-1" style="font-size:0.7rem;"><?php echo $btn['count']; ?></span>
+                        <span class="badge bg-white text-dark ms-1" style="font-size:0.65rem;"><?php echo $btn['count']; ?></span>
                     </a>
                     <?php endforeach; ?>
 
                     <div class="ms-auto d-flex align-items-center gap-1">
                         <form method="GET" action="" class="d-flex m-0">
                             <input type="hidden" name="page" value="loans">
-                            <?php if ($filter_status != 'all'): ?>
                             <input type="hidden" name="status" value="<?php echo htmlspecialchars($filter_status); ?>">
-                            <?php endif; ?>
+                            <input type="hidden" name="start_date" value="<?php echo htmlspecialchars($start_date); ?>">
+                            <input type="hidden" name="end_date" value="<?php echo htmlspecialchars($end_date); ?>">
                             <input type="text" class="form-control form-control-sm me-1" name="search"
-                                   placeholder="Search loans..." value="<?php echo htmlspecialchars($search); ?>" style="width:190px;">
-                            <button type="submit" class="btn btn-sm btn-primary">
-                                <i class="bi bi-search"></i>
-                            </button>
+                                   placeholder="Search loans..." value="<?php echo htmlspecialchars($search); ?>" style="width:170px;">
+                            <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i></button>
                         </form>
                         <a href="?page=applicationfees" class="btn btn-sm btn-outline-primary">App Fees</a>
-                        <a href="?page=createloan" class="btn btn-sm btn-success">
-                            <i class="bi bi-plus-lg"></i> New
-                        </a>
+                        <a href="?page=createloan" class="btn btn-sm btn-success"><i class="bi bi-plus-lg"></i> New</a>
                     </div>
                 </div>
-
-                <?php if ($filter_status != 'all'): ?>
-                <div class="d-flex align-items-center gap-2" style="font-size:0.8rem;">
+                <?php if ($filter_status !== 'all'): ?>
+                <div style="font-size:0.75rem;color:#666;">
                     <i class="bi bi-funnel-fill text-primary"></i>
-                    <strong>Filtered:</strong> Showing <span class="badge bg-secondary"><?php echo htmlspecialchars($filter_status); ?></span> loans only.
-                    <a href="?page=loans<?php echo !empty($search) ? '&search='.urlencode($search) : ''; ?>" class="ms-1 text-danger text-decoration-none"><i class="bi bi-x-circle"></i> Clear</a>
+                    Showing: <strong><?php echo htmlspecialchars($btn_defs[$filter_status]['label'] ?? $filter_status); ?></strong>
+                    <a href="?page=loans&start_date=<?php echo urlencode($start_date); ?>&end_date=<?php echo urlencode($end_date); ?><?php echo !empty($search)?'&search='.urlencode($search):''; ?>" class="ms-2 text-danger text-decoration-none"><i class="bi bi-x-circle"></i> Clear</a>
                 </div>
                 <?php endif; ?>
             </div>
@@ -721,53 +742,6 @@ $current_label = ($filter_status == 'all') ? 'All Loans' : $filter_status;
 </style>
 
 <script>
-// =====================================================
-// STATUS FILTER CARDS UPDATE — instant client-side toggle
-// =====================================================
-const ALL_METRICS = <?php echo json_encode($metrics_by_status); ?>;
-
-function formatNum(val) {
-    const n = parseFloat(val) || 0;
-    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function updateCards(status) {
-    const m = ALL_METRICS[status] || ALL_METRICS['all'];
-    const label = status === 'all' ? 'All Loans' : status;
-    
-    document.getElementById('card-distributed').textContent = formatNum(m.total_distributed);
-    document.getElementById('card-principal').textContent   = formatNum(m.active_principal);
-    document.getElementById('card-interest').textContent    = formatNum(m.active_interest);
-    document.getElementById('card-portfolio').textContent   = formatNum(m.portfolio_value);
-    document.getElementById('card-overdue').textContent     = formatNum(m.total_overdue);
-    
-    const lbl = document.getElementById('current-filter-label');
-    if (lbl) lbl.textContent = label;
-
-    // Animate the cards briefly
-    document.querySelectorAll('#metrics-cards .card').forEach(c => {
-        c.style.transition = 'opacity 0.15s';
-        c.style.opacity = '0.4';
-        setTimeout(() => { c.style.opacity = '1'; }, 200);
-    });
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    // Whenever user clicks a status filter button, update cards immediately
-    // without waiting for page reload (optimistic UI)
-    document.querySelectorAll('.status-filter-btn').forEach(btn => {
-        btn.addEventListener('click', function(e) {
-            const status = this.dataset.status;
-            updateCards(status);
-            // Highlight active button
-            document.querySelectorAll('.status-filter-btn').forEach(b => {
-                b.classList.remove('active');
-            });
-            this.classList.add('active');
-            // Allow the link to navigate normally after updating UI
-        });
-    });
-});
 
 function confirmDelete(loanId, loanNumber) {
     document.getElementById('delete_loan_id').value = loanId;

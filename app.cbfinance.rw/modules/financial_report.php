@@ -488,14 +488,20 @@ switch ($report_type) {
     case 'income_analysis':
         $report_title = "Income Analysis (By Customer)";
         
-        // Fetch detailed loan income data
+        // Fetch detailed loan income data — per loan, using loan_instalments
+        // Also includes disbursement management fee from loan_portfolio
         $analysis_sql = "SELECT 
             lp.loan_id, lp.loan_number, c.customer_name,
-            -- Paid during period
+            -- Paid during the selected period (from loan_instalments)
             SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.interest_paid ELSE 0 END) as period_interest_paid,
             SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.management_fee_paid ELSE 0 END) as period_fee_paid,
             SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.penalty_paid ELSE 0 END) as period_penalty_paid,
-            -- Totals to date
+            -- Disbursement Management Fee: charged at loan start (from loan_portfolio)
+            -- Period disbursement: loans whose disbursement_date falls in the selected period
+            CASE WHEN lp.disbursement_date BETWEEN '$start_date' AND '$query_end_date' THEN lp.management_fee_amount ELSE 0 END as disb_fee_period,
+            -- All-time disbursement fee for this loan
+            lp.management_fee_amount as total_disb_fee,
+            -- Totals to date (all payments ever made on this loan)
             SUM(li.interest_paid) as total_interest_paid,
             SUM(li.management_fee_paid) as total_fee_paid,
             SUM(li.penalty_paid) as total_penalty_paid,
@@ -1654,57 +1660,72 @@ switch ($report_type) {
                             <table class="table table-bordered table-sm table-hover" id="reportTable">
                                 <thead class="table-dark">
                                     <tr>
-                                        <th>Customer / Loan</th>
-                                        <th class="text-end">Paid Interest (Period)</th>
-                                        <th class="text-end">Paid Mgmt Fee (Period)</th>
-                                        <th class="text-end">Paid Penalties (Period)</th>
-                                        <th class="text-end">Total Interest Paid</th>
-                                        <th class="text-end">Total Mgmt Fee Paid</th>
+                                        <th rowspan="2">Customer / Loan</th>
+                                        <th class="text-center" colspan="4" style="background:#1a5276;font-size:0.72rem;">PAID IN SELECTED PERIOD</th>
+                                        <th class="text-center" colspan="3" style="background:#1e8449;font-size:0.72rem;">ALL-TIME TOTALS</th>
+                                        <th class="text-center" colspan="2" style="background:#922b21;font-size:0.72rem;">REMAINING (LEFT)</th>
+                                    </tr>
+                                    <tr style="font-size:0.7rem;">
+                                        <th class="text-end">Interest</th>
+                                        <th class="text-end">Periodic Mgmt</th>
+                                        <th class="text-end" style="background:#7d6608;color:#fff;" title="Disbursement fee charged at loan start">Disb. Mgmt Fee</th>
+                                        <th class="text-end">Penalties</th>
+                                        <th class="text-end">Total Interest</th>
+                                        <th class="text-end">Total Periodic Mgmt</th>
+                                        <th class="text-end" style="background:#7d6608;color:#fff;">Total Disb. Fee</th>
                                         <th class="text-end">Interest Left</th>
                                         <th class="text-end">Mgmt Fee Left</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php 
-                                    $t_pi = 0; $t_pm = 0; $t_pp = 0;
+                                    $t_pi = 0; $t_pm = 0; $t_pp = 0; $t_disb_p = 0; $t_disb_all = 0;
                                     $t_ti = 0; $t_tm = 0;
                                     $t_ri = 0; $t_rm = 0;
                                     
                                     foreach ($report_data as $row) {
-                                        $rem_i = $row['total_interest_exp'] - $row['total_interest_paid'];
-                                        $rem_m = $row['total_fee_exp'] - $row['total_fee_paid'];
+                                        $rem_i = max(0, $row['total_interest_exp'] - $row['total_interest_paid']);
+                                        $rem_m = max(0, $row['total_fee_exp'] - $row['total_fee_paid']);
                                         
-                                        $t_pi += $row['period_interest_paid'];
-                                        $t_pm += $row['period_fee_paid'];
-                                        $t_pp += $row['period_penalty_paid'];
-                                        $t_ti += $row['total_interest_paid'];
-                                        $t_tm += $row['total_fee_paid'];
-                                        $t_ri += $rem_i;
-                                        $t_rm += $rem_m;
+                                        $t_pi      += $row['period_interest_paid'];
+                                        $t_pm      += $row['period_fee_paid'];
+                                        $t_pp      += $row['period_penalty_paid'];
+                                        $t_disb_p  += floatval($row['disb_fee_period']);
+                                        $t_disb_all+= floatval($row['total_disb_fee']);
+                                        $t_ti      += $row['total_interest_paid'];
+                                        $t_tm      += $row['total_fee_paid'];
+                                        $t_ri      += $rem_i;
+                                        $t_rm      += $rem_m;
                                     ?>
                                     <tr>
                                         <td>
                                             <strong><?php echo htmlspecialchars($row['customer_name']); ?></strong><br>
-                                            <small><?php echo htmlspecialchars($row['loan_number']); ?></small>
+                                            <small class="text-muted"><?php echo htmlspecialchars($row['loan_number']); ?></small>
                                         </td>
                                         <td class="text-end"><?php echo formatMoney($row['period_interest_paid']); ?></td>
                                         <td class="text-end"><?php echo formatMoney($row['period_fee_paid']); ?></td>
+                                        <td class="text-end fw-bold" style="background:#fef9e7;">
+                                            <?php echo floatval($row['disb_fee_period']) > 0 ? formatMoney($row['disb_fee_period']) : '<span class="text-muted">&mdash;</span>'; ?>
+                                        </td>
                                         <td class="text-end"><?php echo formatMoney($row['period_penalty_paid']); ?></td>
                                         <td class="text-end fw-bold"><?php echo formatMoney($row['total_interest_paid']); ?></td>
                                         <td class="text-end fw-bold"><?php echo formatMoney($row['total_fee_paid']); ?></td>
-                                        <td class="text-end text-danger"><?php echo formatMoney($rem_i); ?></td>
-                                        <td class="text-end text-danger"><?php echo formatMoney($rem_m); ?></td>
+                                        <td class="text-end fw-bold" style="background:#fef9e7;"><?php echo formatMoney($row['total_disb_fee']); ?></td>
+                                        <td class="text-end text-danger"><?php echo $rem_i > 0 ? formatMoney($rem_i) : '<span class="text-success small">&#10003; Clear</span>'; ?></td>
+                                        <td class="text-end text-danger"><?php echo $rem_m > 0 ? formatMoney($rem_m) : '<span class="text-success small">&#10003; Clear</span>'; ?></td>
                                     </tr>
                                     <?php } ?>
                                 </tbody>
-                                <tfoot class="table-light fw-bold">
+                                <tfoot class="table-secondary fw-bold" style="font-size:0.75rem;">
                                     <tr>
                                         <td>TOTALS</td>
                                         <td class="text-end"><?php echo formatMoney($t_pi); ?></td>
                                         <td class="text-end"><?php echo formatMoney($t_pm); ?></td>
+                                        <td class="text-end" style="background:#fef9e7;"><?php echo formatMoney($t_disb_p); ?></td>
                                         <td class="text-end"><?php echo formatMoney($t_pp); ?></td>
                                         <td class="text-end"><?php echo formatMoney($t_ti); ?></td>
                                         <td class="text-end"><?php echo formatMoney($t_tm); ?></td>
+                                        <td class="text-end" style="background:#fef9e7;"><?php echo formatMoney($t_disb_all); ?></td>
                                         <td class="text-end text-danger"><?php echo formatMoney($t_ri); ?></td>
                                         <td class="text-end text-danger"><?php echo formatMoney($t_rm); ?></td>
                                     </tr>

@@ -492,31 +492,38 @@ switch ($report_type) {
         // Fetch detailed loan income data — per loan, using loan_instalments
         // Also includes disbursement management fee from loan_portfolio
         $analysis_sql = "SELECT 
-            lp.loan_id, lp.loan_number, c.customer_name,
-            -- Paid during the selected period (from loan_instalments)
-            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.interest_paid ELSE 0 END) as period_interest_paid,
-            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.management_fee_paid ELSE 0 END) as period_fee_paid,
-            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN li.penalty_paid ELSE 0 END) as period_penalty_paid,
-            -- Disbursement Management Fee: charged at loan start ONLY IF instalment 1 mgmt fee is 0
+            lp.loan_id, 
+            lp.loan_number, 
+            c.customer_name,
+            
+            -- Paid during the selected period (from loan_payments - SOURCE OF TRUTH)
+            COALESCE((SELECT SUM(interest_amount) FROM loan_payments WHERE loan_id = lp.loan_id AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'), 0) as period_interest_paid,
+            COALESCE((SELECT SUM(monitoring_fee) FROM loan_payments WHERE loan_id = lp.loan_id AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'), 0) as period_fee_paid,
+            COALESCE((SELECT SUM(penalties) FROM loan_payments WHERE loan_id = lp.loan_id AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'), 0) as period_penalty_paid,
+            
+            -- Disbursement Management Fee: ONLY if instalment 1 mgmt fee is 0
             CASE WHEN (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0 THEN 
                  (CASE WHEN lp.disbursement_date BETWEEN '$start_date' AND '$query_end_date' THEN lp.management_fee_amount ELSE 0 END)
             ELSE 0 END as disb_fee_period,
-            -- All-time disbursement fee for this loan ONLY IF instalment 1 mgmt fee is 0
+            
             CASE WHEN (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0 THEN 
                  lp.management_fee_amount
             ELSE 0 END as total_disb_fee,
-            -- Totals to date (all payments ever made on this loan)
-            SUM(li.interest_paid) as total_interest_paid,
-            SUM(li.management_fee_paid) as total_fee_paid,
-            SUM(li.penalty_paid) as total_penalty_paid,
+            
+            -- Totals to date (all payments EVER made on this loan)
+            COALESCE((SELECT SUM(interest_amount) FROM loan_payments WHERE loan_id = lp.loan_id), 0) as total_interest_paid,
+            COALESCE((SELECT SUM(monitoring_fee) FROM loan_payments WHERE loan_id = lp.loan_id), 0) as total_fee_paid,
+            COALESCE((SELECT SUM(penalties) FROM loan_payments WHERE loan_id = lp.loan_id), 0) as total_penalty_paid,
+            
             -- Total expected for comparison
-            SUM(li.interest_amount) as total_interest_exp,
-            SUM(li.management_fee) as total_fee_exp,
-            SUM(li.penalty_amount) as total_penalty_exp
+            COALESCE((SELECT SUM(interest_amount) FROM loan_instalments WHERE loan_id = lp.loan_id), 0) as total_interest_exp,
+            COALESCE((SELECT SUM(management_fee) FROM loan_instalments WHERE loan_id = lp.loan_id), 0) as total_fee_exp,
+            COALESCE((SELECT SUM(penalty_amount) FROM loan_instalments WHERE loan_id = lp.loan_id), 0) as total_penalty_exp
+            
             FROM loan_portfolio lp
             JOIN customers c ON lp.customer_id = c.customer_id
-            JOIN loan_instalments li ON lp.loan_id = li.loan_id
-            GROUP BY lp.loan_id
+            -- only fetch loans that have some valid payment or instalment activity
+            WHERE EXISTS (SELECT 1 FROM loan_instalments WHERE loan_id = lp.loan_id)
             ORDER BY c.customer_name";
             
         $analysis_res = mysqli_query($conn, $analysis_sql);

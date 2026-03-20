@@ -305,8 +305,11 @@ function executeApproval($conn, $approval) {
                 }
             }
 
-            // Always recreate the instalment schedule to ensure it's up to date
-            $conn->query("DELETE FROM loan_instalments WHERE loan_id = " . intval($entity_id));
+            // Robust recreation of the instalment schedule
+            // Step 1: Only delete instalments that DON'T have payments
+            $conn->query("DELETE FROM loan_instalments WHERE loan_id = " . intval($entity_id) . " AND instalment_id NOT IN (SELECT loan_instalment_id FROM loan_payments)");
+
+            // Step 2: Create/Update the schedule (helper handles skipping existing ones)
             _helper_createInstallmentSchedule(
                 $conn, $entity_id, $d['loan_number'], $d['disbursement_date'],
                 $d['number_of_instalments'], 1,
@@ -404,6 +407,14 @@ if (!function_exists('_helper_PPMT')) {
         $disbursement_date_obj = new DateTime($disbursement_date);
         foreach ($schedule as $inst) {
             $i_num = $inst['instalment_number'];
+            
+            // Check if this instalment already exists (e.g. it was kept because it had payments)
+            $check = $conn->query("SELECT instalment_id FROM loan_instalments WHERE loan_id = " . intval($loan_id) . " AND instalment_number = " . intval($i_num));
+            if ($check && $check->num_rows > 0) {
+                // Already exists, skip insertion to prevent duplication
+                continue;
+            }
+
             $due_date_obj = clone $disbursement_date_obj;
             $due_date_obj->modify("+$i_num months");
             $due_date = $due_date_obj->format('Y-m-d');

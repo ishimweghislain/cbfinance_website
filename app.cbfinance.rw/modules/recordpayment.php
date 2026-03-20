@@ -744,6 +744,13 @@ try {
                     $total_paid = $actual_payment_amount - $penalty_paid;
                     $new_balance_remaining = max(0, $current_balance - $total_paid);
 
+                    // --- ROUNDING TOLERANCE ---
+                    // If the remaining balance is very small (e.g. less than 1.0), 
+                    // we treat it as paid to handle penny rounding differences.
+                    if ($new_balance_remaining > 0 && $new_balance_remaining < 1.0) {
+                        $new_balance_remaining = 0;
+                    }
+
                     if ($new_balance_remaining <= 0) {
                         $new_status = 'Fully Paid';
                     }
@@ -1563,7 +1570,7 @@ let currentPaidAmount = 0;
 let currentDueDate    = '';
 
 function formatNumber(num) {
-    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 function formatNumberWithCommas(num) {
@@ -1685,10 +1692,10 @@ function updatePenalties() {
     const finalAmt = currentBalance + adjusted;
 
     // Base balance from DB (should include old penalties already corrected)
-    document.getElementById('summary_balance').textContent  = formatNumber(currentBalance);
+    document.getElementById('summary_balance').textContent  = formatNumberWithCommas(currentBalance.toFixed(2));
     
     // Final Amount to Pay includes the new penalties
-    document.getElementById('summary_final').textContent    = formatNumber(finalAmt);
+    document.getElementById('summary_final').textContent    = formatNumberWithCommas(finalAmt.toFixed(2));
     document.getElementById('actual_payment_display').value = formatNumberWithCommas(finalAmt.toFixed(2));
     document.getElementById('actual_payment_amount').value  = finalAmt.toFixed(2);
     document.getElementById('summary_balance').title        = 'Base balance remaining from previous payments';

@@ -104,6 +104,15 @@ $loans = $conn->query("SELECT loan_number, customer_name FROM loan_portfolio lp 
 // Get common loan-related accounts
 $loan_accounts = $conn->query("SELECT account_code, account_name FROM chart_of_accounts WHERE is_active = TRUE AND account_type = 'Assets' AND (account_name LIKE '%Loan%' OR account_name LIKE '%Interest%' OR account_name LIKE '%Fee%') ORDER BY account_code");
 
+// Fetch last 50 entries for the list (reported as missing/warning)
+$entries = $conn->query("
+    SELECT je.*, vt.voucher_type_name 
+    FROM journal_entries je 
+    LEFT JOIN voucher_types vt ON je.voucher_type_id = vt.voucher_type_id 
+    ORDER BY je.entry_date DESC, je.entry_id DESC 
+    LIMIT 50
+");
+
 ?>
 
 <div class="row mb-4">

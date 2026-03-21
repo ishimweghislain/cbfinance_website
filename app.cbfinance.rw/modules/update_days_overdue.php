@@ -38,7 +38,11 @@ try {
                      (instalment_id, field_changed, old_value, new_value, reason, created_by, created_at)
                      VALUES (?, 'days_overdue', ?, ?, ?, ?, NOW())";
         $log_stmt = $conn->prepare($log_query);
-        $log_stmt->bind_param("iiisi", $instalment_id, $_POST['current_days'] ?? 0, $days_overdue, $reason, $_SESSION['user_id'] ?? 1);
+        
+        $current_days = $_POST['current_days'] ?? 0;
+        $user_id = $_SESSION['user_id'] ?? 1;
+        
+        $log_stmt->bind_param("iiisi", $instalment_id, $current_days, $days_overdue, $reason, $user_id);
         $log_stmt->execute();
         $log_stmt->close();
         
@@ -55,22 +59,4 @@ try {
 }
 
 exit();
-
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    <script>
-        setInterval(() => {
-            
-            window.location.href="?page=recordpayment&loan_id=<? echo $loan_id ?>"
-        }, 100);
-    </script>
-</body>
-</html>

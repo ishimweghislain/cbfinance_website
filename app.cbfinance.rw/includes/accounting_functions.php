@@ -403,4 +403,22 @@ function syncLoanPortfolio($conn, $loan_id) {
     $sync_st->execute();
     $sync_st->close();
 }
+// Provide a fallback for generatePaymentSchedule if it's missing
+if (!function_exists('generatePaymentSchedule')) {
+    function generatePaymentSchedule($conn, $loan_id, $data) {
+        require_once __DIR__ . '/approval_helper.php';
+        if (function_exists('_helper_createInstallmentSchedule')) {
+            _helper_createInstallmentSchedule(
+                $conn, 
+                $loan_id, 
+                $data['loan_number'], 
+                $data['disbursement_date'], 
+                $data['number_of_instalments'], 
+                $data['loan_officer_id'] ?? 1, 
+                $data['disbursement_amount'], 
+                $data['interest_rate']
+            );
+        }
+    }
+}
 ?>

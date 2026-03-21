@@ -23,7 +23,7 @@ if ($loan_id <= 0 || $instalment_id <= 0) {
 
 try {
     $conn = getConnection();
-    
+
     // Update days overdue
     $query = "UPDATE loan_instalments 
               SET days_overdue = ?, 
@@ -31,32 +31,49 @@ try {
               WHERE instalment_id = ? AND loan_id = ?";
     $stmt = $conn->prepare($query);
     $stmt->bind_param("iii", $days_overdue, $instalment_id, $loan_id);
-    
+
     if ($stmt->execute()) {
         // Optional: Log the change
         $log_query = "INSERT INTO instalment_audit_log 
                      (instalment_id, field_changed, old_value, new_value, reason, created_by, created_at)
                      VALUES (?, 'days_overdue', ?, ?, ?, ?, NOW())";
         $log_stmt = $conn->prepare($log_query);
-        
-        $current_days = $_POST['current_days'] ?? 0;
-        $user_id = $_SESSION['user_id'] ?? 1;
-        
-        $log_stmt->bind_param("iiisi", $instalment_id, $current_days, $days_overdue, $reason, $user_id);
+        $log_stmt->bind_param("iiisi", $instalment_id, $_POST['current_days'] ?? 0, $days_overdue, $reason, $_SESSION['user_id'] ?? 1);
         $log_stmt->execute();
         $log_stmt->close();
-        
+
         $_SESSION['success_message'] = "Days overdue updated successfully to " . $days_overdue . " days";
-    } else {
+    }
+    else {
         $_SESSION['error_message'] = "Failed to update days overdue";
     }
-    
+
     $stmt->close();
     $conn->close();
-    
-} catch (Exception $e) {
+
+
+}
+catch (Exception $e) {
     $_SESSION['error_message'] = "Error: " . $e->getMessage();
 }
 
 exit();
+
 ?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <script>
+        setInterval(() => {
+            
+            window.location.href="?page=recordpayment&loan_id=<? echo $loan_id ?>"
+        }, 100);
+    </script>
+</body>
+</html>

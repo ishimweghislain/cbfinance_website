@@ -12,27 +12,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $narration = $_POST['narration'];
         $loan_number = $_POST['loan_number'] ?? '';
         $created_by = $_SESSION['user_name'];
-        
+
         // Get accounts data from form
         $account_codes = $_POST['account_code'];
         $account_names = $_POST['account_name'];
         $debits = $_POST['debit_amount'];
         $credits = $_POST['credit_amount'];
         $line_narrations = $_POST['line_narration'];
-        
+
         // Calculate totals
         $total_debit = array_sum($debits);
         $total_credit = array_sum($credits);
-        
+
         if (abs($total_debit - $total_credit) < 0.01) { // Allow small rounding differences
             // Insert journal entry
             $stmt = $conn->prepare("INSERT INTO journal_entries (entry_date, voucher_number, voucher_type_id, reference_number, loan_number, narration, total_debit, total_credit, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->bind_param("ssisssdds", $entry_date, $voucher_number, $voucher_type_id, $reference_number, $loan_number, $narration, $total_debit, $total_credit, $created_by);
             $stmt->execute();
-            
+
             $entry_id = $stmt->insert_id;
             $stmt->close();
-            
+
             // Insert journal entry lines
             for ($i = 0; $i < count($account_codes); $i++) {
                 if (!empty($account_codes[$i]) && ($debits[$i] > 0 || $credits[$i] > 0)) {
@@ -41,10 +41,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $account_stmt->bind_param("s", $account_codes[$i]);
                     $account_stmt->execute();
                     $account_result = $account_stmt->get_result();
-                    
+
                     if ($account_row = $account_result->fetch_assoc()) {
                         $account_id = $account_row['account_id'];
-                        
+
                         $stmt = $conn->prepare("INSERT INTO journal_entry_lines (entry_id, line_number, account_id, account_code, account_name, debit_amount, credit_amount, line_narration) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                         $line_num = $i + 1;
                         $stmt->bind_param("iiissdds", $entry_id, $line_num, $account_id, $account_codes[$i], $account_names[$i], $debits[$i], $credits[$i], $line_narrations[$i]);
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $account_stmt->close();
                 }
             }
-            
+
             // Also insert into accounting_entries table for loan tracking
             if (!empty($loan_number)) {
                 for ($i = 0; $i < count($account_codes); $i++) {
@@ -68,26 +68,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-            
+
             $success_message = "Journal entry created successfully! Entry ID: $entry_id";
-        } else {
+        }
+        else {
             $error_message = "Journal entry is not balanced! Debit: " . number_format($total_debit, 2) . ", Credit: " . number_format($total_credit, 2);
         }
     }
-    
+
     if (isset($_POST['post_entry'])) {
         $entry_id = $_POST['entry_id'];
-        
+
         // Update journal entry status
         $conn->query("UPDATE journal_entries SET is_posted = TRUE, posted_date = NOW(), approved_by = '{$_SESSION['user_name']}' WHERE entry_id = $entry_id");
-        
+
         // Update account balances
         $result = $conn->query("SELECT account_id, SUM(debit_amount) as total_debit, SUM(credit_amount) as total_credit FROM journal_entry_lines WHERE entry_id = $entry_id GROUP BY account_id");
         while ($row = $result->fetch_assoc()) {
             $balance_change = $row['total_debit'] - $row['total_credit'];
             $conn->query("UPDATE chart_of_accounts SET current_balance = current_balance + $balance_change WHERE account_id = {$row['account_id']}");
         }
-        
+
         $success_message = "Journal entry posted successfully!";
     }
 }
@@ -103,15 +104,6 @@ $loans = $conn->query("SELECT loan_number, customer_name FROM loan_portfolio lp 
 
 // Get common loan-related accounts
 $loan_accounts = $conn->query("SELECT account_code, account_name FROM chart_of_accounts WHERE is_active = TRUE AND account_type = 'Assets' AND (account_name LIKE '%Loan%' OR account_name LIKE '%Interest%' OR account_name LIKE '%Fee%') ORDER BY account_code");
-
-// Fetch last 50 entries for the list (reported as missing/warning)
-$entries = $conn->query("
-    SELECT je.*, vt.voucher_type_name 
-    FROM journal_entries je 
-    LEFT JOIN voucher_types vt ON je.voucher_type_id = vt.voucher_type_id 
-    ORDER BY je.entry_date DESC, je.entry_id DESC 
-    LIMIT 50
-");
 
 ?>
 
@@ -294,7 +286,8 @@ p, .form-label, .small {
     <?php echo $success_message; ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
-<?php endif; ?>
+<?php
+endif; ?>
 
 <?php if (isset($error_message)): ?>
 <div class="alert alert-danger alert-dismissible fade show" role="alert">
@@ -302,7 +295,8 @@ p, .form-label, .small {
     <?php echo $error_message; ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
-<?php endif; ?>
+<?php
+endif; ?>
 
 <div class="row mb-4">
     <div class="col-md-6">
@@ -342,7 +336,7 @@ p, .form-label, .small {
                             </tr>
                         </thead>
                         <tbody>
-                            <?php while($entry = $entries->fetch_assoc()): ?>
+                            <?php while ($entry = $entries->fetch_assoc()): ?>
                             <tr>
                                 <td><?php echo date('M d, Y', strtotime($entry['entry_date'])); ?></td>
                                 <td><code><?php echo htmlspecialchars($entry['voucher_number']); ?></code></td>
@@ -350,36 +344,42 @@ p, .form-label, .small {
                                 <td>
                                     <?php if (!empty($entry['loan_number'])): ?>
                                         <span class="badge bg-info"><?php echo htmlspecialchars($entry['loan_number']); ?></span>
-                                    <?php else: ?>
+                                    <?php
+    else: ?>
                                         <span class="text-muted">-</span>
-                                    <?php endif; ?>
+                                    <?php
+    endif; ?>
                                 </td>
                                 <td><?php echo htmlspecialchars(substr($entry['narration'], 0, 40)) . (strlen($entry['narration']) > 40 ? '...' : ''); ?></td>
                                 <td class="text-success fw-bold">FRW <?php echo number_format($entry['total_debit'], 2); ?></td>
                                 <td class="text-danger fw-bold">FRW <?php echo number_format($entry['total_credit'], 2); ?></td>
                                 <td>
-                                    <?php if($entry['is_posted']): ?>
+                                    <?php if ($entry['is_posted']): ?>
                                     <span class="badge bg-success">Posted</span>
-                                    <?php if($entry['is_reversed']): ?>
+                                    <?php if ($entry['is_reversed']): ?>
                                     <span class="badge bg-danger ms-1">Reversed</span>
-                                    <?php endif; ?>
-                                    <?php else: ?>
+                                    <?php
+        endif; ?>
+                                    <?php
+    else: ?>
                                     <span class="badge bg-warning">Pending</span>
-                                    <?php endif; ?>
+                                    <?php
+    endif; ?>
                                 </td>
                                 <td>
                                     <div class="btn-group btn-group-sm">
                                         <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#viewEntryModal<?php echo $entry['entry_id']; ?>">
                                             <i class="fas fa-eye"></i>
                                         </button>
-                                        <?php if(!$entry['is_posted']): ?>
+                                        <?php if (!$entry['is_posted']): ?>
                                         <form method="POST" style="display: inline;">
                                             <input type="hidden" name="entry_id" value="<?php echo $entry['entry_id']; ?>">
                                             <button type="submit" name="post_entry" class="btn btn-outline-success" onclick="return confirm('Post this entry?')">
                                                 <i class="fas fa-check-circle"></i>
                                             </button>
                                         </form>
-                                        <?php endif; ?>
+                                        <?php
+    endif; ?>
                                     </div>
                                     
                                     <!-- View Entry Modal -->
@@ -412,9 +412,9 @@ p, .form-label, .small {
                                                     </div>
                                                     
                                                     <h6 class="mb-3">Entry Lines</h6>
-                                                    <?php 
-                                                    $lines_result = $conn->query("SELECT * FROM journal_entry_lines WHERE entry_id = {$entry['entry_id']} ORDER BY line_number");
-                                                    if ($lines_result->num_rows > 0): ?>
+                                                    <?php
+    $lines_result = $conn->query("SELECT * FROM journal_entry_lines WHERE entry_id = {$entry['entry_id']} ORDER BY line_number");
+    if ($lines_result->num_rows > 0): ?>
                                                     <div class="table-responsive">
                                                         <table class="table table-sm">
                                                             <thead>
@@ -427,7 +427,7 @@ p, .form-label, .small {
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
-                                                                <?php while($line = $lines_result->fetch_assoc()): ?>
+                                                                <?php while ($line = $lines_result->fetch_assoc()): ?>
                                                                 <tr>
                                                                     <td><code><?php echo htmlspecialchars($line['account_code']); ?></code></td>
                                                                     <td><?php echo htmlspecialchars($line['account_name']); ?></td>
@@ -435,7 +435,8 @@ p, .form-label, .small {
                                                                     <td class="text-end"><?php echo $line['credit_amount'] > 0 ? 'FRW ' . number_format($line['credit_amount'], 2) : '-'; ?></td>
                                                                     <td><?php echo htmlspecialchars($line['line_narration']); ?></td>
                                                                 </tr>
-                                                                <?php endwhile; ?>
+                                                                <?php
+        endwhile; ?>
                                                             </tbody>
                                                             <tfoot>
                                                                 <tr class="table-light">
@@ -447,7 +448,8 @@ p, .form-label, .small {
                                                             </tfoot>
                                                         </table>
                                                     </div>
-                                                    <?php endif; ?>
+                                                    <?php
+    endif; ?>
                                                 </div>
                                                 <div class="modal-footer">
                                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -457,7 +459,8 @@ p, .form-label, .small {
                                     </div>
                                 </td>
                             </tr>
-                            <?php endwhile; ?>
+                            <?php
+endwhile; ?>
                         </tbody>
                     </table>
                 </div>
@@ -489,22 +492,25 @@ p, .form-label, .small {
                             <label class="form-label">Voucher Type *</label>
                             <select class="form-select" name="voucher_type_id" required>
                                 <option value="">Select Type</option>
-                                <?php $voucher_types->data_seek(0); while($type = $voucher_types->fetch_assoc()): ?>
+                                <?php $voucher_types->data_seek(0);
+while ($type = $voucher_types->fetch_assoc()): ?>
                                 <option value="<?php echo $type['voucher_type_id']; ?>">
                                     <?php echo htmlspecialchars($type['voucher_type_name']); ?>
                                 </option>
-                                <?php endwhile; ?>
+                                <?php
+endwhile; ?>
                             </select>
                         </div>
                         <div class="col-md-2">
                             <label class="form-label">Loan Number</label>
                             <select class="form-select" name="loan_number" id="loan_number_select">
                                 <option value="">Select Loan</option>
-                                <?php while($loan = $loans->fetch_assoc()): ?>
+                                <?php while ($loan = $loans->fetch_assoc()): ?>
                                 <option value="<?php echo htmlspecialchars($loan['loan_number']); ?>">
                                     <?php echo htmlspecialchars($loan['loan_number'] . ' - ' . $loan['customer_name']); ?>
                                 </option>
-                                <?php endwhile; ?>
+                                <?php
+endwhile; ?>
                             </select>
                         </div>
                         <div class="col-md-2">
@@ -530,7 +536,7 @@ p, .form-label, .small {
                     <h6 class="mb-3">Journal Lines</h6>
                     <div id="journalLines">
                         <!-- Default 2 lines -->
-                        <?php for($i = 0; $i < 2; $i++): ?>
+                        <?php for ($i = 0; $i < 2; $i++): ?>
                         <div class="row mb-3 journal-line">
                             <div class="col-md-2">
                                 <label class="form-label">Account Code *</label>
@@ -559,15 +565,18 @@ p, .form-label, .small {
                                 <input type="text" class="form-control line-narration" name="line_narration[]" placeholder="e.g., Principal, Interest, Fees, etc.">
                             </div>
                         </div>
-                        <?php endfor; ?>
+                        <?php
+endfor; ?>
                     </div>
                     
                     <datalist id="accountCodes">
-                        <?php $accounts->data_seek(0); while($account = $accounts->fetch_assoc()): ?>
+                        <?php $accounts->data_seek(0);
+while ($account = $accounts->fetch_assoc()): ?>
                         <option value="<?php echo htmlspecialchars($account['account_code']); ?>">
                             <?php echo htmlspecialchars($account['account_name']); ?>
                         </option>
-                        <?php endwhile; ?>
+                        <?php
+endwhile; ?>
                     </datalist>
                     
                     <div class="mb-3">

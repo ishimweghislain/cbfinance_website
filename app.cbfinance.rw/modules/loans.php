@@ -586,7 +586,7 @@ $filtered_loan_count = ($filter_status == 'all') ? $total_all_loans : ($status_c
             <div class="card-body py-2 px-3">
                 <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;">Rec. Returns</div>
                 <div class="fw-bold mt-1 text-success" id="card-revenues" style="font-size:1.05rem;"><?php echo number_format($ps['total_revenues'], 2); ?></div>
-                <div class="text-muted" style="font-size:0.7rem;">Collected interest + fees</div>
+                <div class="text-muted" style="font-size:0.7rem;">Collected Int. + Fees + Penalties</div>
             </div>
         </div>
     </div>

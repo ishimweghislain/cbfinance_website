@@ -217,7 +217,8 @@ if ($is_active_group_filter) {
         COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as active_principal,
         COALESCE(SUM((SELECT SUM(GREATEST(0, interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as active_interest,
         COALESCE(SUM((SELECT SUM(GREATEST(0, principal_amount - principal_paid + interest_amount - interest_paid)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as portfolio_value,
-        COALESCE(SUM((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())), 0) as total_overdue
+        COALESCE(SUM((SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())), 0) as total_overdue,
+        COALESCE(SUM((SELECT SUM(interest_paid + management_fee_paid + COALESCE(penalty_paid, 0)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as total_revenues
         FROM loan_portfolio lp
         WHERE $metrics_where";
 } else {
@@ -236,7 +237,8 @@ if ($is_active_group_filter) {
             ELSE 0 END), 0) as portfolio_value,
         COALESCE(SUM(CASE WHEN lp.loan_status IN {$active_group} THEN
             (SELECT SUM(balance_remaining) FROM loan_instalments WHERE loan_id = lp.loan_id AND due_date < CURDATE())
-            ELSE 0 END), 0) as total_overdue
+            ELSE 0 END), 0) as total_overdue,
+        COALESCE(SUM((SELECT SUM(interest_paid + management_fee_paid + COALESCE(penalty_paid, 0)) FROM loan_instalments WHERE loan_id = lp.loan_id)), 0) as total_revenues
         FROM loan_portfolio lp
         WHERE $metrics_where";
 }
@@ -575,6 +577,16 @@ $filtered_loan_count = ($filter_status == 'all') ? $total_all_loans : ($status_c
                 <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;">Total Overdue</div>
                 <div class="fw-bold mt-1 text-danger" id="card-overdue" style="font-size:1.05rem;"><?php echo number_format($ps['total_overdue'], 2); ?></div>
                 <div class="text-muted" style="font-size:0.7rem;">Due &amp; unpaid instalments</div>
+            </div>
+        </div>
+    </div>
+    <!-- Card 6: Total Revenues -->
+    <div class="col">
+        <div class="card border-start border-4 border-secondary h-100 shadow-sm" style="background:#eefdf4; border-color: #198754 !important;">
+            <div class="card-body py-2 px-3">
+                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;">Rec. Returns</div>
+                <div class="fw-bold mt-1 text-success" id="card-revenues" style="font-size:1.05rem;"><?php echo number_format($ps['total_revenues'], 2); ?></div>
+                <div class="text-muted" style="font-size:0.7rem;">Collected interest + fees</div>
             </div>
         </div>
     </div>

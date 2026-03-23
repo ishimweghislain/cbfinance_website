@@ -471,14 +471,18 @@ switch ($report_type) {
             if ($first_digit == '4' || $first_digit == '5' || $first_digit == '6') {
                 $report_data[] = $account;
                 
-                $closing_balance = $account['closing_balance'];
+                // Calculate totals using PERIOD movement for Income Statement
+                $period_move = abs($account['period_credit'] - $account['period_debit']);
                 
-                // Calculate totals
                 if ($first_digit == '4') {
-                    $total_revenue += abs($closing_balance); // Revenue is negative (credit)
+                    $total_revenue += $period_move;
                 } elseif ($first_digit == '5' || $first_digit == '6') {
-                    $total_expenses += $closing_balance; // Expense is positive (debit)
+                    $total_expenses += $period_move;
                 }
+                
+                // Keep closing balance for reference if needed, 
+                // but we might want to store the display_balance here
+                $account['display_balance'] = $period_move;
             }
         }
         
@@ -507,13 +511,13 @@ switch ($report_type) {
                  (CASE WHEN li.balance_remaining <= 0 THEN li.management_fee ELSE li.management_fee_paid END)
             ELSE 0 END) as period_fee_paid,
             
-            SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN 
+            SUM(CASE WHEN li.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59' THEN 
                  li.penalty_paid
             ELSE 0 END) as period_penalty_paid,
             
             -- Disbursement Management Fee: ONLY if instalment 1 mgmt fee is 0
             CASE WHEN (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0 THEN 
-                 (CASE WHEN lp.disbursement_date BETWEEN '$start_date' AND '$query_end_date' THEN lp.management_fee_amount ELSE 0 END)
+                 (CASE WHEN lp.disbursement_date BETWEEN '{$sd}' AND '{$query_ed}' THEN lp.management_fee_amount ELSE 0 END)
             ELSE 0 END as disb_fee_period,
             
             CASE WHEN (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0 THEN 
@@ -1395,21 +1399,21 @@ switch ($report_type) {
 
                         foreach ($report_data as $row) {
                             $first_digit = substr($row['account_code'], 0, 1);
-                            $closing_balance = $row['closing_balance'];
                             $class = $row['class'];
+                            
+                            // Use the display_balance (period movement) calculated above
+                            $period_move = $row['display_balance'] ?? abs($row['period_credit'] - $row['period_debit']);
 
                             if ($first_digit == '4') {
-                                $display = abs($closing_balance);
-                                $is_rev_total += $display;
-                                if (!isset($revenue_groups[$class])) $revenue_groups[$class] = ['rows' => [], 'total' => 0];
-                                $revenue_groups[$class]['rows'][] = $row;
-                                $revenue_groups[$class]['total'] += $display;
-                            } else {
-                                $display = $closing_balance;
-                                $is_exp_total += $display;
-                                if (!isset($expense_groups[$class])) $expense_groups[$class] = ['rows' => [], 'total' => 0];
-                                $expense_groups[$class]['rows'][] = $row;
-                                $expense_groups[$class]['total'] += $display;
+                                if (!isset($revenue_groups[$class])) $revenue_groups[$class] = ['rows' => [], 'subtotal' => 0];
+                                $revenue_groups[$class]['rows'][]    = $row;
+                                $revenue_groups[$class]['subtotal'] += $period_move;
+                                $is_rev_total += $period_move;
+                            } elseif ($first_digit == '5' || $first_digit == '6') {
+                                if (!isset($expense_groups[$class])) $expense_groups[$class] = ['rows' => [], 'subtotal' => 0];
+                                $expense_groups[$class]['rows'][]    = $row;
+                                $expense_groups[$class]['subtotal'] += $period_move;
+                                $is_exp_total += $period_move;
                             }
                         }
                         ?>

@@ -131,12 +131,13 @@ function buildOverdueQuery($conn, $sd, $ed, $cf) {
 function buildPaymentsQuery($conn, $sd, $ed, $cf) {
     $sd = mysqli_real_escape_string($conn, $sd);
     $ed = mysqli_real_escape_string($conn, $ed);
+    $query_ed = $ed . ' 23:59:59';
     
-    $where_li = ["li.payment_date BETWEEN '{$sd}' AND '{$ed}'"];
+    $where_li = ["li.payment_date BETWEEN '{$sd} 00:00:00' AND '{$query_ed}'"];
     if ($cf) $where_li[] = "lp.customer_id = " . intval($cf);
     $wc_li = implode(' AND ', $where_li);
 
-    $where_lp = ["lp.disbursement_date BETWEEN '{$sd}' AND '{$ed}'"];
+    $where_lp = ["lp.disbursement_date BETWEEN '{$sd} 00:00:00' AND '{$query_ed}'"];
     if ($cf) $where_lp[] = "lp.customer_id = " . intval($cf);
     // Only capture if it's a "Disbursement Management Fee" (instalment 1 mgmt fee is 0)
     $where_lp[] = "(SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0";

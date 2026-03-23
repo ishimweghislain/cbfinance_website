@@ -138,6 +138,12 @@ $account_classes = [
     'Income Statement' => 'Income Statement'
 ];
 
+// Mapping Classes to their allowed Account Types
+$class_to_types = [
+    'Balance Sheet' => ['Asset', 'Liability', 'Equity'],
+    'Income Statement' => ['Revenue', 'Expense', 'Gain', 'Loss']
+];
+
 $account_types = [
     'Asset' => 'Asset',
     'Liability' => 'Liability', 
@@ -357,9 +363,19 @@ $recent_result = $conn->query($recent_query);
                                 <select name="account_type" class="form-select" required id="accountTypeSelect">
                                     <option value="">-- Select Type --</option>
                                     <?php foreach ($account_types as $key => $value): ?>
+                                        <?php 
+                                            // Determine which class this type belongs to
+                                            $belongs_to = '';
+                                            foreach($class_to_types as $c => $ts) {
+                                                if(in_array($key, $ts)) { $belongs_to = $c; break; }
+                                            }
+                                        ?>
                                         <option value="<?php echo $key; ?>"
+                                            class="type-option"
+                                            data-class="<?php echo $belongs_to; ?>"
                                             <?php echo (isset($_POST['account_type']) && $_POST['account_type'] == $key) ? 'selected' : ''; ?>
-                                            data-normal-balance="<?php echo in_array($key, ['Asset', 'Expense', 'Loss']) ? 'Debit' : 'Credit'; ?>">
+                                            data-normal-balance="<?php echo in_array($key, ['Asset', 'Expense', 'Loss']) ? 'Debit' : 'Credit'; ?>"
+                                            style="display:none;">
                                             <?php echo $value; ?>
                                         </option>
                                     <?php endforeach; ?>
@@ -517,6 +533,7 @@ $recent_result = $conn->query($recent_query);
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('classSelect');
     const accountTypeSelect = document.getElementById('accountTypeSelect');
     const subTypeSelect = document.getElementById('subTypeSelect');
     const normalBalanceSelect = document.getElementById('normalBalanceSelect');
@@ -525,6 +542,28 @@ document.addEventListener('DOMContentLoaded', function() {
     // Define sub-types for each account type
     const subTypes = <?php echo json_encode($sub_types); ?>;
     
+    // Filter Account Types based on Class Selection
+    classSelect.addEventListener('change', function() {
+        const selectedClass = this.value;
+        const options = accountTypeSelect.querySelectorAll('.type-option');
+        
+        // Reset type selection
+        accountTypeSelect.selectedIndex = 0;
+        subTypeSelect.innerHTML = '<option value="">-- Select Sub Type --</option>';
+        normalBalanceSelect.selectedIndex = 0;
+        balanceHint.textContent = '';
+        
+        options.forEach(opt => {
+            if (opt.getAttribute('data-class') === selectedClass || selectedClass === "") {
+                opt.style.display = 'block';
+                opt.disabled = false;
+            } else {
+                opt.style.display = 'none';
+                opt.disabled = true;
+            }
+        });
+    });
+
     // Update sub-types when account type changes
     accountTypeSelect.addEventListener('change', function() {
         const selectedType = this.value;

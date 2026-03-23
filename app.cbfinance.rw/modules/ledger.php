@@ -1032,13 +1032,9 @@ $accounts_result = mysqli_query($conn, $accounts_sql);
             </div>
         </div>
         <?php endif; ?>
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="mb-4">
             <a href="index.php?page=ledger_management" class="btn btn-outline-secondary">
                 <i class="fas fa-cog me-1"></i>Manage Ledger
-            </a>
-            <a href="index.php?page=ledger&action=sync_all_balances" class="btn btn-warning" 
-               onclick="return confirm('This will re-calculate every single line in the ledger to fix historical balance errors. It may take a moment. Proceed?')">
-                <i class="fas fa-tools me-1"></i>Repair & Sync Historical Balances
             </a>
         </div>
         <!-- Time Frame Filter Section -->

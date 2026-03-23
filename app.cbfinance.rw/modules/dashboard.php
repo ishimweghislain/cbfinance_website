@@ -78,26 +78,12 @@ try {
         $stats['assets'] = $result->fetch_assoc();
     }
     
-    // 4. Total Revenue — Sophisticated Paid-Basis logic matching Official Reports
-    // 4.1 Installments component (Capped logic for accurate recognition)
-    $rev_li = $conn->query("SELECT 
-        SUM(CASE WHEN balance_remaining <= 0 THEN interest_amount ELSE interest_paid END) as interest,
-        SUM(CASE WHEN balance_remaining <= 0 THEN management_fee ELSE management_fee_paid END) as periodic_fee,
-        SUM(CASE WHEN balance_remaining <= 0 THEN penalty_amount ELSE penalty_paid END) as penalty
-        FROM loan_instalments")->fetch_assoc();
-
-    // 4.2 Upfront Disbursement Fees (Account 4202)
-    $rev_up = $conn->query("SELECT SUM(management_fee_amount) as upfront 
-        FROM loan_portfolio lp 
-        WHERE (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0")->fetch_assoc();
-
-    // 4.3 Ledger-only Revenue (Other 4xxx accounts)
-    $rev_led = $conn->query("SELECT SUM(credit_amount - debit_amount) as other 
-        FROM ledger 
-        WHERE SUBSTRING(account_code, 1, 1) = '4' 
-        AND account_code NOT IN ('4101', '4201', '4202', '4205')")->fetch_assoc();
-
-    $stats['revenue']['total_revenue'] = ($rev_li['interest'] ?? 0) + ($rev_li['periodic_fee'] ?? 0) + ($rev_li['penalty'] ?? 0) + ($rev_up['upfront'] ?? 0) + ($rev_led['other'] ?? 0);
+    // 4. Total Revenue — 100% Ledger-Based for consistency across all reports
+    $rev_res = $conn->query("SELECT SUM(credit_amount - debit_amount) as total 
+                            FROM ledger 
+                            WHERE SUBSTRING(account_code, 1, 1) = '4'");
+    $rev_data = $rev_res->fetch_assoc();
+    $stats['revenue']['total_revenue'] = floatval($rev_data['total'] ?? 0);
     
     // 5. Recent Loans
     $recent_loans = $conn->query("SELECT 

@@ -251,18 +251,6 @@ function executeApproval($conn, $approval) {
                 $conn, $new_loan_id, $d['loan_number'], 'Disbursement',
                 $d['disbursement_date'], $d['total_disbursed'], "Loan disbursement", 1
             );
-
-            // NEW: Record to Accounting Ledger (Source of Truth for Financial Reports)
-            _helper_recordDisbursementToLedger($conn, [
-                'loan_id' => $new_loan_id,
-                'loan_number' => $d['loan_number'],
-                'customer_id' => $d['customer_id'],
-                'total_disbursed' => $d['total_disbursed'], // Gross Principal (Debit 1201)
-                'management_fee' => $d['management_fee'],   // Upfront Fee (Credit 4202)
-                'loan_amount' => $d['loan_amount'],         // Actual Cash Out (Credit 1102)
-                'disbursement_date' => $d['disbursement_date'],
-                'submitted_by' => $approval['submitted_by']
-            ]);
             require_once __DIR__ . '/activity_logger.php';
             logActivity($conn, 'create', 'loan', $new_loan_id, "Approved creation of loan: {$d['loan_number']} for customer ID: {$d['customer_id']}");
             break;

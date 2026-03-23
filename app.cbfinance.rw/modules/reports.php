@@ -131,17 +131,41 @@ function buildOverdueQuery($conn, $sd, $ed, $cf) {
 function buildPaymentsQuery($conn, $sd, $ed, $cf) {
     $sd = mysqli_real_escape_string($conn, $sd);
     $ed = mysqli_real_escape_string($conn, $ed);
-    $w  = ["li.payment_date BETWEEN '{$sd}' AND '{$ed}'"];
-    if ($cf) $w[] = "lp.customer_id = " . intval($cf);
-    $wc = implode(' AND ', $w);
-    return "SELECT li.instalment_id, li.loan_number, li.instalment_number, li.due_date, li.payment_date,
-        li.principal_amount, li.interest_amount, li.management_fee,
-        li.total_payment, li.paid_amount, li.principal_paid, li.interest_paid,
-        li.management_fee_paid, li.penalty_paid, li.balance_remaining, c.customer_name, c.customer_code, lp.loan_status
+    
+    $where_li = ["li.payment_date BETWEEN '{$sd}' AND '{$ed}'"];
+    if ($cf) $where_li[] = "lp.customer_id = " . intval($cf);
+    $wc_li = implode(' AND ', $where_li);
+
+    $where_lp = ["lp.disbursement_date BETWEEN '{$sd}' AND '{$ed}'"];
+    if ($cf) $where_lp[] = "lp.customer_id = " . intval($cf);
+    // Only capture if it's a "Disbursement Management Fee" (instalment 1 mgmt fee is 0)
+    $where_lp[] = "(SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0";
+    $wc_lp = implode(' AND ', $where_lp);
+
+    return "(SELECT 
+            li.instalment_id, li.loan_number, li.instalment_number, li.due_date, li.payment_date,
+            li.principal_amount, li.interest_amount, li.management_fee,
+            li.total_payment, li.paid_amount, li.principal_paid, li.interest_paid,
+            li.management_fee_paid, li.penalty_paid, li.balance_remaining, 
+            c.customer_name, c.customer_code, lp.loan_status,
+            0.00 as disbursement_fee_paid -- Not a disbursement fee row
         FROM loan_instalments li
         LEFT JOIN loan_portfolio lp ON li.loan_id = lp.loan_id
         LEFT JOIN customers c ON lp.customer_id = c.customer_id
-        WHERE {$wc} ORDER BY li.payment_date DESC";
+        WHERE {$wc_li})
+        UNION ALL
+        (SELECT 
+            0 as instalment_id, lp.loan_number, 0 as instalment_number, lp.disbursement_date as due_date, lp.disbursement_date as payment_date,
+            0 as principal_amount, 0 as interest_amount, 0 as management_fee,
+            lp.management_fee_amount as total_payment, lp.management_fee_amount as paid_amount, 
+            0 as principal_paid, 0 as interest_paid, 0 as management_fee_paid, 0 as penalty_paid, 
+            0 as balance_remaining,
+            c.customer_name, c.customer_code, lp.loan_status,
+            lp.management_fee_amount as disbursement_fee_paid
+        FROM loan_portfolio lp
+        LEFT JOIN customers c ON lp.customer_id = c.customer_id
+        WHERE {$wc_lp})
+        ORDER BY payment_date DESC";
 }
 
 function buildProvisionsQuery($conn, $sd, $ed, $cf) {
@@ -290,7 +314,7 @@ function getHeaders($type) {
                     'Principal', 'Interest', 'Mgmt Fee', 'Mgmt Fee Paid', 'Unpaid Mgmt Fee', 'Total Due', 'Balance Remaining', 'Provision Category'];
         case 'payments':
             return ['Loan Number', 'Customer Name', 'Instalment #', 'Due Date', 'Payment Date',
-                    'Principal Paid', 'Interest Paid', 'Mgmt Fee Paid', 'Penalty Paid', 'Total Collected', 'Balance Remaining'];
+                    'Principal Paid', 'Interest Paid', 'Mgmt Fee Paid', 'Disbursement Fee', 'Penalty Paid', 'Total Collected', 'Balance Remaining'];
         case 'provisions':
             return ['Loan Number', 'Customer Name', 'Total Outstanding', 'Collateral Net Value',
                     'Exposure', 'Max Days Overdue', 'Provision Rate', 'Provision Amount',
@@ -493,36 +517,50 @@ function formatRows($type, $data) {
             break;
 
         case 'payments':
-            $t_pp = $t_ip = $t_mfp = $t_pen = $t_tc = $t_br = 0;
+            $t_pp = $t_ip = $t_mfp = $t_dfp = $t_pen = $t_tc = $t_br = 0;
             foreach ($data as $r) {
-                $t_pp   += $r['principal_paid'] ?? 0;
-                $t_ip   += $r['interest_paid'] ?? 0;
-                $t_mfp  += $r['management_fee_paid'] ?? 0;
-                $t_pen  += $r['penalty_paid'] ?? 0;
-                $t_tc   += ($r['paid_amount'] + ($r['penalty_paid'] ?? 0));
-                $t_br   += $r['balance_remaining'] ?? 0;
+                // Logic sync with financial_report.php: Use capped amounts for I/F if fully paid, and cash for penalties
+                $is_fully_paid = ($r['balance_remaining'] <= 0 && $r['instalment_id'] > 0);
+                
+                $i_paid_display  = $is_fully_paid ? ($r['interest_amount'] ?? 0)  : ($r['interest_paid'] ?? 0);
+                $mf_paid_display = $is_fully_paid ? ($r['management_fee'] ?? 0)   : ($r['management_fee_paid'] ?? 0);
+                $p_paid_display  = $r['principal_paid'] ?? 0;
+                $pen_paid_display = $r['penalty_paid'] ?? 0; // Penalties: collected cash only
+                $df_paid_display = $r['disbursement_fee_paid'] ?? 0;
+
+                $total_collected = $p_paid_display + $i_paid_display + $mf_paid_display + $pen_paid_display + $df_paid_display;
+
+                $t_pp   += $p_paid_display;
+                $t_ip   += $i_paid_display;
+                $t_mfp  += $mf_paid_display;
+                $t_dfp  += $df_paid_display;
+                $t_pen  += $pen_paid_display;
+                $t_tc   += $total_collected;
+                $t_br   += ($r['balance_remaining'] ?? 0);
 
                 $rows[] = [
-                    $r['loan_number'], $r['customer_name'], $r['instalment_number'],
+                    $r['loan_number'], $r['customer_name'], ($r['instalment_number'] > 0 ? $r['instalment_number'] : 'DISB'),
                     $r['due_date']     ? date('Y-m-d', strtotime($r['due_date']))     : '',
                     $r['payment_date'] ? date('Y-m-d', strtotime($r['payment_date'])) : '',
-                    number_format($r['principal_paid'], 2),
-                    number_format($r['interest_paid'], 2),
-                    number_format($r['management_fee_paid'], 2),
-                    number_format($r['penalty_paid'], 2),
-                    number_format($r['paid_amount'] + $r['penalty_paid'], 2),
-                    number_format($r['balance_remaining'], 2),
+                    number_format($p_paid_display, 2),
+                    number_format($i_paid_display, 2),
+                    number_format($mf_paid_display, 2),
+                    number_format($df_paid_display, 2),
+                    number_format($pen_paid_display, 2),
+                    number_format($total_collected, 2),
+                    number_format($r['balance_remaining'] ?? 0, 2),
                 ];
             }
             if (!empty($data)) {
-                $totals = array_fill(0, 11, '');
+                $totals = array_fill(0, 12, '');
                 $totals[0] = 'TOTAL PAYMENTS (' . count($data) . ')';
                 $totals[5] = number_format($t_pp, 2);
                 $totals[6] = number_format($t_ip, 2);
                 $totals[7] = number_format($t_mfp, 2);
-                $totals[8] = number_format($t_pen, 2);
-                $totals[9] = number_format($t_tc, 2);
-                $totals[10] = number_format($t_br, 2);
+                $totals[8] = number_format($t_dfp, 2);
+                $totals[9] = number_format($t_pen, 2);
+                $totals[10] = number_format($t_tc, 2);
+                $totals[11] = number_format($t_br, 2);
             }
             break;
 

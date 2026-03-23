@@ -109,15 +109,16 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
                 $exp_col = ''; $paid_col = '';
                 if ($account_code === '4101') { $exp_col = 'interest_amount'; $paid_col = 'interest_paid'; }
                 elseif ($account_code === '4201') { $exp_col = 'management_fee'; $paid_col = 'management_fee_paid'; }
-                elseif ($account_code === '4205') { $exp_col = 'penalty_amount'; $paid_col = 'penalty_paid'; }
+                elseif ($account_code === '4205') { $exp_col = ''; $paid_col = 'penalty_paid'; } // Penalty: collected only
                 
                 if ($exp_col) {
-                    $res_open = mysqli_query($conn, "SELECT SUM(CASE WHEN balance_remaining <= 0 THEN $exp_col ELSE $paid_col END) as op FROM loan_instalments WHERE payment_date < '$start_date 00:00:00'");
+                    $calc_field = $exp_col ? "CASE WHEN balance_remaining <= 0 THEN $exp_col ELSE $paid_col END" : "$paid_col";
+                    $res_open = mysqli_query($conn, "SELECT SUM($calc_field) as op FROM loan_instalments WHERE payment_date < '$start_date 00:00:00'");
                     if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
                         $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
                     }
                     
-                    $res_move = mysqli_query($conn, "SELECT SUM(CASE WHEN balance_remaining <= 0 THEN $exp_col ELSE $paid_col END) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'");
+                    $res_move = mysqli_query($conn, "SELECT SUM($calc_field) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'");
                     if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
                         $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
                     }
@@ -507,7 +508,7 @@ switch ($report_type) {
             ELSE 0 END) as period_fee_paid,
             
             SUM(CASE WHEN li.payment_date BETWEEN '$start_date' AND '$query_end_date' THEN 
-                 (CASE WHEN li.balance_remaining <= 0 THEN li.penalty_amount ELSE li.penalty_paid END)
+                 li.penalty_paid
             ELSE 0 END) as period_penalty_paid,
             
             -- Disbursement Management Fee: ONLY if instalment 1 mgmt fee is 0

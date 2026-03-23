@@ -255,7 +255,7 @@ $rev_ed = $end_date . ' 23:59:59';
 $rev_li_sql = "SELECT 
     SUM(CASE WHEN balance_remaining <= 0 THEN interest_amount ELSE interest_paid END) as interest,
     SUM(CASE WHEN balance_remaining <= 0 THEN management_fee ELSE management_fee_paid END) as periodic_fee,
-    SUM(CASE WHEN balance_remaining <= 0 THEN penalty_amount ELSE penalty_paid END) as penalty
+    SUM(penalty_paid) as penalty
     FROM loan_instalments 
     WHERE payment_date BETWEEN '$rev_sd' AND '$rev_ed'";
 $rev_li = $conn->query($rev_li_sql)->fetch_assoc();
@@ -264,7 +264,7 @@ $rev_li = $conn->query($rev_li_sql)->fetch_assoc();
 $rev_up_sql = "SELECT SUM(management_fee_amount) as upfront 
     FROM loan_portfolio lp 
     WHERE lp.disbursement_date BETWEEN '$start_date' AND '$end_date'
-    AND (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0";
+    AND IFNULL((SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1), 0) = 0";
 $rev_up_result = $conn->query($rev_up_sql);
 $rev_up_amt = ($rev_up_result && $rev_up_result->num_rows > 0) ? $rev_up_result->fetch_assoc()['upfront'] : 0;
 

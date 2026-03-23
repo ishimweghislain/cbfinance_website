@@ -82,9 +82,9 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
         // ==========================================
         // CUSTOM LOGIC: Portfolio-Based Correction for Core Accounts
         // Accounts 4101, 4201, 4202, 4205 (Income) and 1201 (Loan Principal)
-        // Bank (1102) and Cash (1101) to account for missing disbursement outflows
+        // Users want these to reflect ACTUAL system data (from loan tables)
         // ==========================================
-        if (in_array($account_code, ['1201', '4101', '4201', '4202', '4205', '4301', '1102', '1101'])) {
+        if (in_array($account_code, ['1201', '4101', '4201', '4202', '4205', '4301'])) {
             
             $initial_balance = 0;
             $period_debit = 0;
@@ -138,25 +138,19 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
                 elseif ($account_code === '4201') { $exp_col = 'management_fee'; $paid_col = 'management_fee_paid'; }
                 elseif ($account_code === '4205') { $exp_col = ''; $paid_col = 'penalty_paid'; } // Penalty: collected only
                 
-                // Interest 4101, Periodic Mgmt Fee 4201, Penalties 4205
-                $calc_field = '';
-                if ($account_code === '4101') { $calc_field = 'interest_paid'; }
-                elseif ($account_code === '4201') { $calc_field = 'management_fee_paid'; }
-                elseif ($account_code === '4205') { $calc_field = 'penalty_paid'; }
-
-                if ($calc_field) {
-                    $res_open = mysqli_query($conn, "SELECT SUM($calc_field) as op FROM loan_instalments WHERE payment_date < '$start_date 00:00:00'");
-                    if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
-                        $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
-                    }
-                    
-                    $res_move = mysqli_query($conn, "SELECT SUM($calc_field) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date'");
-                    if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
-                        $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
-                    }
+                $calc_field = $exp_col ? "CASE WHEN balance_remaining <= 0 THEN $exp_col ELSE $paid_col END" : "$paid_col";
+                
+                $res_open = mysqli_query($conn, "SELECT SUM($calc_field) as op FROM loan_instalments WHERE payment_date < '$start_date 00:00:00'");
+                if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
+                    $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
+                }
+                
+                $res_move = mysqli_query($conn, "SELECT SUM($calc_field) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'");
+                if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
+                    $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
                 }
             } elseif ($account_code === '4301') {
-                 // For 4301 fallback to ledger
+                // For 4301 fallback to ledger
                 $res_open = mysqli_query($conn, "SELECT SUM(credit_amount - debit_amount) as op FROM ledger WHERE account_code = '$account_code' AND transaction_date < '$start_date'");
                 if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
                     $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
@@ -167,37 +161,7 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
                     $period_debit = roundAmount(floatval($row_move['d'] ?? 0));
                     $period_credit = roundAmount(floatval($row_move['c'] ?? 0));
                 }
-            } elseif ($account_code === '1102' || $account_code === '1101') {
-                // Bank (1102) or Cash (1101) - Correct for missing disbursement outflows
-                // Get ledger balance basics
-                $res_l_open = mysqli_query($conn, "SELECT SUM(debit_amount - credit_amount) as bal FROM ledger WHERE account_code = '$account_code' AND transaction_date < '$start_date'");
-                $l_open = $res_l_open ? floatval(mysqli_fetch_assoc($res_l_open)['bal'] ?? 0) : 0;
-                
-                $res_l_move = mysqli_query($conn, "SELECT SUM(debit_amount) as d, SUM(credit_amount) as c FROM ledger WHERE account_code = '$account_code' AND transaction_date BETWEEN '$start_date' AND '$query_end_date'");
-                $l_move_row = mysqli_fetch_assoc($res_l_move);
-                $l_period_debit = floatval($l_move_row['d'] ?? 0);
-                $l_period_credit = floatval($l_move_row['c'] ?? 0);
-                
-                // Identify missing outflows from portfolio
-                $port_field = ($account_code === '1102' ? 'bank_amount' : 'cash_amount');
-                
-                // Missing before start date: Disbursements in portfolio but NOT in ledger for this asset account
-                $res_m_open = mysqli_query($conn, "SELECT SUM($port_field) as tot FROM loan_portfolio lp 
-                                                 WHERE disbursement_date < '$start_date' 
-                                                 AND NOT EXISTS (SELECT 1 FROM ledger l WHERE l.account_code = '$account_code' AND l.reference_type = 'loan' AND l.reference_id = lp.loan_id)");
-                $missing_open = $res_m_open ? floatval(mysqli_fetch_assoc($res_m_open)['tot'] ?? 0) : 0;
-                
-                // Missing in period
-                $res_m_move = mysqli_query($conn, "SELECT SUM($port_field) as tot FROM loan_portfolio lp 
-                                                 WHERE disbursement_date BETWEEN '$start_date' AND '$end_date'
-                                                 AND NOT EXISTS (SELECT 1 FROM ledger l WHERE l.account_code = '$account_code' AND l.reference_type = 'loan' AND l.reference_id = lp.loan_id)");
-                $missing_move = $res_m_move ? floatval(mysqli_fetch_assoc($res_m_move)['tot'] ?? 0) : 0;
-                
-                $initial_balance = roundAmount($l_open - $missing_open);
-                $period_debit = roundAmount($l_period_debit);
-                $period_credit = roundAmount($l_period_credit + $missing_move);
             }
-
             
             $closing_balance = $initial_balance + $period_debit - $period_credit;
             
@@ -299,45 +263,24 @@ foreach ($trial_data as $account) {
 // Current Period Earnings/Loss = Total Revenues - Total Expenses
 $current_period_earnings = roundAmount($total_revenues - $total_expenses);
 
-// 1. ASSETS
-$total_assets_val = 0;
-foreach ($trial_data as $acc) {
-    if (in_array($acc['class'], ['Assets', 'Fixed Assets'])) $total_assets_val += $acc['closing_balance'];
+// Calculate TOTAL PROFIT/LOSS (from beginning of time to end_date)
+$escaped_end_date = mysqli_real_escape_string($conn, $end_date);
+$total_profit_loss_sql = "SELECT 
+    SUM(CASE WHEN SUBSTRING(account_code, 1, 1) = '4' THEN credit_amount - debit_amount ELSE 0 END) as total_revenue,
+    SUM(CASE WHEN SUBSTRING(account_code, 1, 1) IN ('5', '6') THEN debit_amount - credit_amount ELSE 0 END) as total_expense
+    FROM ledger 
+    WHERE transaction_date <= '$query_end_date'";
+
+$total_pl_result = mysqli_query($conn, $total_profit_loss_sql);
+if ($total_pl_result && mysqli_num_rows($total_pl_result) > 0) {
+    $pl_row = mysqli_fetch_assoc($total_pl_result);
+    $cumulative_revenue = roundAmount(floatval($pl_row['total_revenue'] ?? 0));
+    $cumulative_expense = roundAmount(floatval($pl_row['total_expense'] ?? 0));
+    $previous_total_profit_loss = roundAmount($cumulative_revenue - $cumulative_expense);
 }
 
-// 2. LIABILITIES
-$total_liabilities_val = 0;
-foreach ($trial_data as $acc) {
-    if (in_array($acc['class'], ['Liabilities', 'Liabilites'])) $total_liabilities_val += abs($acc['closing_balance']);
-}
-
-// 3. CAPITAL
-$capital_val = 0;
-foreach ($trial_data as $acc) {
-    if ($acc['account_code'] === '3001') $capital_val = abs($acc['closing_balance']);
-}
-
-// 4. THE PLUG: Calculate Total Required Equity and derive Retained Earnings
-// Assets = Liab + Equity -> Equity = Assets - Liab
-$required_total_equity = $total_assets_val - $total_liabilities_val;
-
-// Retained Earnings = Required Total Equity - Capital - Current Period Earnings
-$retained_earnings = roundAmount($required_total_equity - $capital_val - $current_period_earnings);
-
-// Synchronize Equity Accounts in the results list to force-balance the report
-foreach ($trial_data as &$account) {
-    if ($account['account_code'] === '3101' || $account['account_code'] === '3103') {
-        $account['closing_balance'] = -$current_period_earnings; // Credit is profit
-        $account['period_credit'] = $current_period_earnings;
-        $account['initial_balance'] = 0;
-    } elseif ($account['account_code'] === '3102') {
-        $account['closing_balance'] = -$retained_earnings; // Credit is profit balance (negative in normal list)
-        $account['period_credit'] = 0;
-        $account['period_debit'] = 0;
-        $account['initial_balance'] = -$retained_earnings;
-    }
-}
-unset($account);
+// Retained Earnings = Total Profit/Loss - Current Period Earnings/Loss
+$retained_earnings = roundAmount($previous_total_profit_loss - $current_period_earnings);
 
 // Define class order for TRIAL BALANCE (exact order as specified)
 $trial_balance_class_order = [

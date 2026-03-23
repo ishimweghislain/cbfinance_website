@@ -21,6 +21,18 @@ if (mysqli_num_rows($check_coa) == 0) {
     echo "Account 1201 already exists in Chart of Accounts.<br>";
 }
 
+// 1.2 ADD ACCOUNT 4301 TO CHART OF ACCOUNTS (IF MISSING)
+$check_coa2 = mysqli_query($conn, "SELECT account_id FROM chart_of_accounts WHERE account_code = '4301'");
+if (mysqli_num_rows($check_coa2) == 0) {
+    echo "Adding Account 4301 to Chart of Accounts...<br>";
+    $sql_insert_coa2 = "INSERT INTO `chart_of_accounts` 
+        (`account_code`, `account_name`, `class`, `account_type`, `sub_type`, `normal_balance`, `is_active`, `created_at`, `updated_at`) 
+        VALUES 
+        ('4301', 'Impairment Recovery', 'Income Statement', 'Revenue', 'Operating Revenue', 'Credit', 1, NOW(), NOW())";
+    mysqli_query($conn, $sql_insert_coa2);
+    echo "<span style='color:green'>SUCCESS: Account 4301 added.</span><br>";
+}
+
 // 2. CALCULATE REAL OUTSTANDING PRINCIPAL
 echo "Calculating Current Outstanding Principal from Loan Portfolio...<br>";
 $sql_port = "SELECT SUM(principal_outstanding) as total_principal FROM loan_portfolio WHERE loan_status IN ('Active', 'Overdue', 'Written-off')";

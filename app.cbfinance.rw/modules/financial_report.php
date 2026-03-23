@@ -102,38 +102,36 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
                 if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
                     $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
                 }
-            } else {
+            } elseif (in_array($account_code, ['4101', '4201', '4205'])) {
                 // Accounts from loan_instalments table
                 // Interest 4101, Periodic Mgmt Fee 4201, Penalties 4205
-                // USE CAPPED LOGIC: For fully paid instalments, use the exact expected amount to match UI schedule and ignore garbage overpayments.
                 $exp_col = ''; $paid_col = '';
                 if ($account_code === '4101') { $exp_col = 'interest_amount'; $paid_col = 'interest_paid'; }
                 elseif ($account_code === '4201') { $exp_col = 'management_fee'; $paid_col = 'management_fee_paid'; }
                 elseif ($account_code === '4205') { $exp_col = ''; $paid_col = 'penalty_paid'; } // Penalty: collected only
                 
-                if ($exp_col) {
-                    $calc_field = $exp_col ? "CASE WHEN balance_remaining <= 0 THEN $exp_col ELSE $paid_col END" : "$paid_col";
-                    $res_open = mysqli_query($conn, "SELECT SUM($calc_field) as op FROM loan_instalments WHERE payment_date < '$start_date 00:00:00'");
-                    if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
-                        $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
-                    }
-                    
-                    $res_move = mysqli_query($conn, "SELECT SUM($calc_field) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'");
-                    if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
-                        $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
-                    }
-                } else {
-                    // For 4301 or others not explicitly mapped to installments, fallback to ledger
-                    $res_open = mysqli_query($conn, "SELECT SUM(credit_amount - debit_amount) as op FROM ledger WHERE account_code = '$account_code' AND transaction_date < '$start_date'");
-                    if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
-                        $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
-                    }
-                    
-                    $res_move = mysqli_query($conn, "SELECT SUM(debit_amount) as d, SUM(credit_amount) as c FROM ledger WHERE account_code = '$account_code' AND transaction_date BETWEEN '$start_date' AND '$query_end_date'");
-                    if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
-                        $period_debit = roundAmount(floatval($row_move['d'] ?? 0));
-                        $period_credit = roundAmount(floatval($row_move['c'] ?? 0));
-                    }
+                $calc_field = $exp_col ? "CASE WHEN balance_remaining <= 0 THEN $exp_col ELSE $paid_col END" : "$paid_col";
+                
+                $res_open = mysqli_query($conn, "SELECT SUM($calc_field) as op FROM loan_instalments WHERE payment_date < '$start_date 00:00:00'");
+                if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
+                    $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
+                }
+                
+                $res_move = mysqli_query($conn, "SELECT SUM($calc_field) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'");
+                if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
+                    $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
+                }
+            } elseif ($account_code === '4301') {
+                // For 4301 fallback to ledger
+                $res_open = mysqli_query($conn, "SELECT SUM(credit_amount - debit_amount) as op FROM ledger WHERE account_code = '$account_code' AND transaction_date < '$start_date'");
+                if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
+                    $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
+                }
+                
+                $res_move = mysqli_query($conn, "SELECT SUM(debit_amount) as d, SUM(credit_amount) as c FROM ledger WHERE account_code = '$account_code' AND transaction_date BETWEEN '$start_date' AND '$query_end_date'");
+                if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
+                    $period_debit = roundAmount(floatval($row_move['d'] ?? 0));
+                    $period_credit = roundAmount(floatval($row_move['c'] ?? 0));
                 }
             }
             
@@ -532,7 +530,7 @@ switch ($report_type) {
             
             FROM loan_portfolio lp
             JOIN customers c ON lp.customer_id = c.customer_id
-            JOIN loan_instalments li ON lp.loan_id = li.loan_id
+            LEFT JOIN loan_instalments li ON lp.loan_id = li.loan_id
             GROUP BY lp.loan_id
             ORDER BY c.customer_name";
             

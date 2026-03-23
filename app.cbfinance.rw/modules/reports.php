@@ -384,10 +384,22 @@ function formatRows($type, $data) {
             break;
 
         case 'instalments':
+            $t_ob = $t_cb = $t_p = $t_i = $t_mf = $t_tp = $t_paid = $t_pen = $t_tc = $t_br = 0;
             foreach ($data as $r) {
                 $is_overdue = ($r['balance_remaining'] > 0 && strtotime($r['due_date']) < time());
                 $status = $r['balance_remaining'] <= 0 ? 'Paid' : ($is_overdue ? 'Overdue' : 'Pending');
                 
+                $t_ob   += $r['opening_balance'] ?? 0;
+                $t_cb   += $r['closing_balance'] ?? 0;
+                $t_p    += $r['principal_amount'] ?? 0;
+                $t_i    += $r['interest_amount'] ?? 0;
+                $t_mf   += $r['management_fee'] ?? 0;
+                $t_tp   += $r['total_payment'] ?? 0;
+                $t_paid += $r['paid_amount'] ?? 0;
+                $t_pen  += $r['penalty_paid'] ?? 0;
+                $t_tc   += ($r['paid_amount'] + ($r['penalty_paid'] ?? 0));
+                $t_br   += $r['balance_remaining'] ?? 0;
+
                 // Use live DATEDIFF if overdue
                 $live_days = $is_overdue ? floor((time() - strtotime($r['due_date'])) / 86400) : 0;
                 $rows[] = [
@@ -409,6 +421,20 @@ function formatRows($type, $data) {
                     ($live_days > 0) ? $live_days : '',
                     $status,
                 ];
+            }
+            if (!empty($data)) {
+                $totals = array_fill(0, 17, '');
+                $totals[0] = 'TOTALS (' . count($data) . ' instalments)';
+                $totals[5] = number_format($t_ob, 2);
+                $totals[6] = number_format($t_cb, 2);
+                $totals[7] = number_format($t_p, 2);
+                $totals[8] = number_format($t_i, 2);
+                $totals[9] = number_format($t_mf, 2);
+                $totals[10] = number_format($t_tp, 2);
+                $totals[11] = number_format($t_paid, 2);
+                $totals[12] = number_format($t_pen, 2);
+                $totals[13] = number_format($t_tc, 2);
+                $totals[14] = number_format($t_br, 2);
             }
             break;
 
@@ -467,10 +493,15 @@ function formatRows($type, $data) {
             break;
 
         case 'payments':
-            $tp = 0; $tpen = 0;
+            $t_pp = $t_ip = $t_mfp = $t_pen = $t_tc = $t_br = 0;
             foreach ($data as $r) {
-                $tp += $r['paid_amount'];
-                $tpen += $r['penalty_paid'];
+                $t_pp   += $r['principal_paid'] ?? 0;
+                $t_ip   += $r['interest_paid'] ?? 0;
+                $t_mfp  += $r['management_fee_paid'] ?? 0;
+                $t_pen  += $r['penalty_paid'] ?? 0;
+                $t_tc   += ($r['paid_amount'] + ($r['penalty_paid'] ?? 0));
+                $t_br   += $r['balance_remaining'] ?? 0;
+
                 $rows[] = [
                     $r['loan_number'], $r['customer_name'], $r['instalment_number'],
                     $r['due_date']     ? date('Y-m-d', strtotime($r['due_date']))     : '',
@@ -485,9 +516,13 @@ function formatRows($type, $data) {
             }
             if (!empty($data)) {
                 $totals = array_fill(0, 11, '');
-                $totals[0] = 'TOTAL COLLECTED';
-                $totals[8] = number_format($tpen, 2);
-                $totals[9] = number_format($tp + $tpen, 2);
+                $totals[0] = 'TOTAL PAYMENTS (' . count($data) . ')';
+                $totals[5] = number_format($t_pp, 2);
+                $totals[6] = number_format($t_ip, 2);
+                $totals[7] = number_format($t_mfp, 2);
+                $totals[8] = number_format($t_pen, 2);
+                $totals[9] = number_format($t_tc, 2);
+                $totals[10] = number_format($t_br, 2);
             }
             break;
 

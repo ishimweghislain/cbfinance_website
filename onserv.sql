@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Mar 23, 2026 at 01:50 PM
+-- Generation Time: Mar 23, 2026 at 03:53 PM
 -- Server version: 5.7.44
 -- PHP Version: 8.1.34
 
@@ -611,7 +611,8 @@ INSERT INTO `chart_of_accounts` (`account_id`, `class`, `account_code`, `account
 (121, 'Income Statement', '5008', 'Board of Directors Allowances', 'Expense', 'Operating Expense', 'Debit', 1, '2026-03-16 09:07:50', '2026-03-16 09:07:50'),
 (122, 'Income Statement', '5009', 'Board Meeting Expenses', 'Expense', 'Operating Expense', 'Debit', 1, '2026-03-16 09:23:53', '2026-03-16 09:23:53'),
 (123, 'Income Statement', '5010', 'Software Development Expense', 'Expense', 'Operating Expense', 'Debit', 1, '2026-03-17 10:24:45', '2026-03-17 10:24:45'),
-(124, 'Balance Sheet', '5011', 'Mobile Money Account', 'Asset', 'Current Asset', 'Debit', 1, '2026-03-18 10:08:12', '2026-03-18 10:08:12');
+(124, 'Balance Sheet', '5011', 'Mobile Money Account', 'Asset', 'Current Asset', 'Debit', 1, '2026-03-18 10:08:12', '2026-03-18 10:08:12'),
+(125, 'Balance Sheet', '1201', 'Loans to Customers', 'Asset', 'Current Asset', 'Debit', 1, '2026-03-23 20:29:51', '2026-03-23 20:29:51');
 
 -- --------------------------------------------------------
 
@@ -4885,7 +4886,7 @@ ALTER TABLE `assets`
 -- AUTO_INCREMENT for table `chart_of_accounts`
 --
 ALTER TABLE `chart_of_accounts`
-  MODIFY `account_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=125;
+  MODIFY `account_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=126;
 
 --
 -- AUTO_INCREMENT for table `customers`

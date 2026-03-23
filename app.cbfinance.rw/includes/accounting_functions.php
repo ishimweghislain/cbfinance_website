@@ -24,7 +24,7 @@ function createNewLoan($conn, $data)
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ");
 
-        $stmt->bind_param("sisssdddsidddddddisssssddsss",
+        $stmt->bind_param("sisssddssidddddddidssssddss",
             $data['loan_number'], $data['customer_id'], $data['loan_purpose'],
             $data['product_type'], $data['loan_officer_id'], $data['disbursement_amount'],
             $data['interest_rate'], $data['disbursement_date'], $data['maturity_date'],

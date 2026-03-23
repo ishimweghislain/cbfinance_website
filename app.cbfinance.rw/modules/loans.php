@@ -243,6 +243,42 @@ if ($is_active_group_filter) {
         WHERE $metrics_where";
 }
 $stats = $conn->query($stats_sql)->fetch_assoc();
+
+// ================================================
+// EXACT FIRM-WIDE REVENUE CALCULATION — MATCHES THE INCOME STATEMENT
+// Scoped to the selected Start and End dates for accurate reporting comparison.
+// ================================================
+$rev_sd = $start_date . ' 00:00:00';
+$rev_ed = $end_date . ' 23:59:59';
+
+// 1. Installment-based Income: Capped logic to handle rounding/overpayments
+$rev_li_sql = "SELECT 
+    SUM(CASE WHEN balance_remaining <= 0 THEN interest_amount ELSE interest_paid END) as interest,
+    SUM(CASE WHEN balance_remaining <= 0 THEN management_fee ELSE management_fee_paid END) as periodic_fee,
+    SUM(CASE WHEN balance_remaining <= 0 THEN penalty_amount ELSE penalty_paid END) as penalty
+    FROM loan_instalments 
+    WHERE payment_date BETWEEN '$rev_sd' AND '$rev_ed'";
+$rev_li = $conn->query($rev_li_sql)->fetch_assoc();
+
+// 2. Upfront Disbursement Fees (Account 4202)
+$rev_up_sql = "SELECT SUM(management_fee_amount) as upfront 
+    FROM loan_portfolio lp 
+    WHERE lp.disbursement_date BETWEEN '$start_date' AND '$end_date'
+    AND (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0";
+$rev_up_result = $conn->query($rev_up_sql);
+$rev_up_amt = ($rev_up_result && $rev_up_result->num_rows > 0) ? $rev_up_result->fetch_assoc()['upfront'] : 0;
+
+// 3. Other 4xxx Revenue accounts from the Ledger
+$rev_ledge_sql = "SELECT SUM(credit_amount - debit_amount) as other 
+    FROM ledger 
+    WHERE SUBSTRING(account_code, 1, 1) = '4' 
+    AND account_code NOT IN ('4101', '4201', '4202', '4205')
+    AND transaction_date BETWEEN '$start_date' AND '$end_date'";
+$rev_ledge = $conn->query($rev_ledge_sql)->fetch_assoc();
+
+// Sum it all up
+$stats['total_revenues'] = ($rev_li['interest'] ?? 0) + ($rev_li['periodic_fee'] ?? 0) + ($rev_li['penalty'] ?? 0) + ($rev_up_amt ?? 0) + ($rev_ledge['other'] ?? 0);
+
 $ps = $stats;
 
 // ── Status counts (all-time, no date filter) ──
@@ -584,9 +620,9 @@ $filtered_loan_count = ($filter_status == 'all') ? $total_all_loans : ($status_c
     <div class="col">
         <div class="card border-start border-4 border-secondary h-100 shadow-sm" style="background:#eefdf4; border-color: #198754 !important;">
             <div class="card-body py-2 px-3">
-                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;">Rec. Returns</div>
+                <div class="text-muted text-uppercase" style="font-size:0.65rem;font-weight:700;">Total Revenue</div>
                 <div class="fw-bold mt-1 text-success" id="card-revenues" style="font-size:1.05rem;"><?php echo number_format($ps['total_revenues'], 2); ?></div>
-                <div class="text-muted" style="font-size:0.7rem;">Collected Int. + Fees + Penalties</div>
+                <div class="text-muted" style="font-size:0.7rem;">Interest + Fees + Penalties (Total Income)</div>
             </div>
         </div>
     </div>

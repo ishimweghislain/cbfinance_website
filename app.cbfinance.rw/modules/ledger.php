@@ -22,6 +22,18 @@ if (isset($_GET['action'])) {
         header("Location: index.php?page=ledger");
         exit();
     }
+    
+    // NEW: Sync all account balances to fix historical 'Balance Jumps'
+    if ($_GET['action'] === 'sync_all_balances') {
+        $accounts_query = "SELECT DISTINCT account_code FROM ledger";
+        $accounts_res = mysqli_query($conn, $accounts_query);
+        while($acc = mysqli_fetch_assoc($accounts_res)) {
+            recalculateAccountEndingBalances($conn, $acc['account_code']);
+        }
+        $_SESSION['success_message'] = "All historical balances have been recalculated and repaired!";
+        header("Location: index.php?page=ledger");
+        exit();
+    }
 }
 
 // Helper functions with consistent rounding
@@ -44,20 +56,15 @@ function generateVoucherNumber($type = 'RV') {
     return $type . '-' . $date . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
 }
 
-function calculateBeginningBalance($conn, $account_code, $transaction_date) {
+function calculateBeginningBalance($conn, $account_code, $transaction_date = null) {
     // Sanitize inputs
     $account_code = mysqli_real_escape_string($conn, $account_code);
-    $transaction_date = mysqli_real_escape_string($conn, $transaction_date);
     
-    // Get the LAST ending balance from ALL previous transactions for this account
+    // Get the absolute latest ending balance currently recorded in the system for this account.
+    // In a chronological system, the very last entry in the DB for this code is the current state.
     $sql = "SELECT ending_balance 
             FROM ledger 
             WHERE account_code = '$account_code' 
-            AND (
-                transaction_date < '$transaction_date'
-                OR (transaction_date = '$transaction_date' 
-                    AND ledger_id < (SELECT COALESCE(MAX(ledger_id), 0) FROM ledger WHERE account_code = '$account_code' AND transaction_date = '$transaction_date'))
-            )
             ORDER BY transaction_date DESC, ledger_id DESC 
             LIMIT 1";
     
@@ -65,10 +72,8 @@ function calculateBeginningBalance($conn, $account_code, $transaction_date) {
     
     if ($result && mysqli_num_rows($result) > 0) {
         $row = mysqli_fetch_assoc($result);
-        $balance = roundAmount(floatval($row['ending_balance']));
-        return $balance;
+        return roundAmount(floatval($row['ending_balance']));
     } else {
-        // If no previous entries for this account, starting balance is 0
         return 0.00;
     }
 }
@@ -178,8 +183,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
         $principal = roundAmount($principal + ($total_payment - $rounded_total));
     }
     
-    // Generate voucher number from customer code
-    $voucher_number = $transaction_data['customer_code'] ?: 'RV-' . date('Ymd-His');
+    // ── VOUCHER NAMING FIX ──────────────────────────────────────────
+    // Standardize naming: RV-CustomerCode-Timestamp for clear auditing
+    $cust_ref = $transaction_data['customer_code'] ?: 'CUST';
+    $voucher_number = 'RV-' . $cust_ref . '-' . date('His');
     
     // Narration and particular (same for all entries in this transaction)
     $narration = $transaction_data['narration'] ?: 
@@ -1025,9 +1032,14 @@ $accounts_result = mysqli_query($conn, $accounts_sql);
             </div>
         </div>
         <?php endif; ?>
-        <a href="index.php?page=ledger_management" class="btn btn-outline-secondary float-center">
-    <i class="fas fa-cog me-1"></i>Manage Ledger
-</a>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <a href="index.php?page=ledger_management" class="btn btn-outline-secondary">
+                <i class="fas fa-cog me-1"></i>Manage Ledger
+            </a>
+            <a href="index.php?page=ledger&action=sync_all_balances" class="btn btn-warning" 
+               onclick="return confirm('This will re-calculate every single line in the ledger to fix historical balance errors. It may take a moment. Proceed?')">
+                <i class="fas fa-tools me-1"></i>Repair & Sync Historical Balances
+            </a>
         </div>
         <!-- Time Frame Filter Section -->
         <div class="row mb-4">

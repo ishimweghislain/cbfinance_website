@@ -79,66 +79,6 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
             continue;
         }
         
-        // ==========================================
-        // CUSTOM LOGIC: Paid-Basis Income Correction for Accounts 4101, 4201, 4202, 4205
-        // Users want these accounts to reflect ACTUAL PAYMENTS (from loan_instalments)
-        // EXCEPT Account 4202 which comes from loan_portfolio (Disbursement Fee)
-        // ==========================================
-        if (in_array($account_code, ['4101', '4201', '4202', '4205', '4301'])) {
-            
-            $initial_balance = 0;
-            $period_debit = 0;
-            $period_credit = 0;
-
-            if ($account_code === '4202') {
-                // Disbursement Fee (One-time, upfront) from loan_portfolio
-                // Rule: Only counts if the very first instalment has a management fee = 0
-                $res_open = mysqli_query($conn, "SELECT SUM(management_fee_amount) as op FROM loan_portfolio lp WHERE disbursement_date < '$start_date' AND (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0");
-                if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
-                    $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
-                }
-                
-                $res_move = mysqli_query($conn, "SELECT SUM(management_fee_amount) as mp FROM loan_portfolio lp WHERE disbursement_date BETWEEN '$start_date' AND '$query_end_date' AND (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0");
-                if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
-                    $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
-                }
-            } else {
-                // Accounts from loan_instalments table
-                // Interest 4101, Periodic Mgmt Fee 4201, Penalties 4205
-                // USE CAPPED LOGIC: For fully paid instalments, use the exact expected amount to match UI schedule and ignore garbage overpayments.
-                $exp_col = ''; $paid_col = '';
-                if ($account_code === '4101') { $exp_col = 'interest_amount'; $paid_col = 'interest_paid'; }
-                elseif ($account_code === '4201') { $exp_col = 'management_fee'; $paid_col = 'management_fee_paid'; }
-                elseif ($account_code === '4205') { $exp_col = 'penalty_amount'; $paid_col = 'penalty_paid'; }
-                
-                if ($exp_col) {
-                    $res_open = mysqli_query($conn, "SELECT SUM(CASE WHEN balance_remaining <= 0 THEN $exp_col ELSE $paid_col END) as op FROM loan_instalments WHERE payment_date < '$start_date 00:00:00'");
-                    if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
-                        $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
-                    }
-                    
-                    $res_move = mysqli_query($conn, "SELECT SUM(CASE WHEN balance_remaining <= 0 THEN $exp_col ELSE $paid_col END) as mp FROM loan_instalments WHERE payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59'");
-                    if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
-                        $period_credit = roundAmount(floatval($row_move['mp'] ?? 0));
-                    }
-                } else {
-                    // For 4301 or others not explicitly mapped to installments, fallback to ledger
-                    $res_open = mysqli_query($conn, "SELECT SUM(credit_amount - debit_amount) as op FROM ledger WHERE account_code = '$account_code' AND transaction_date < '$start_date'");
-                    if ($res_open && $row_open = mysqli_fetch_assoc($res_open)) {
-                        $initial_balance = -roundAmount(floatval($row_open['op'] ?? 0));
-                    }
-                    
-                    $res_move = mysqli_query($conn, "SELECT SUM(debit_amount) as d, SUM(credit_amount) as c FROM ledger WHERE account_code = '$account_code' AND transaction_date BETWEEN '$start_date' AND '$query_end_date'");
-                    if ($res_move && $row_move = mysqli_fetch_assoc($res_move)) {
-                        $period_debit = roundAmount(floatval($row_move['d'] ?? 0));
-                        $period_credit = roundAmount(floatval($row_move['c'] ?? 0));
-                    }
-                }
-            }
-            
-            $closing_balance = $initial_balance + $period_debit - $period_credit;
-            
-        } else {
             // ==========================================
             // STEP 1: Get OPENING BALANCE (before start_date)
             // ==========================================

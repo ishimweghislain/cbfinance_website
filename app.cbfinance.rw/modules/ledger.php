@@ -22,12 +22,12 @@ if (isset($_GET['action'])) {
         header("Location: index.php?page=ledger");
         exit();
     }
-
+    
     // NEW: Sync all account balances to fix historical 'Balance Jumps'
     if ($_GET['action'] === 'sync_all_balances') {
         $accounts_query = "SELECT DISTINCT account_code FROM ledger";
         $accounts_res = mysqli_query($conn, $accounts_query);
-        while ($acc = mysqli_fetch_assoc($accounts_res)) {
+        while($acc = mysqli_fetch_assoc($accounts_res)) {
             recalculateAccountEndingBalances($conn, $acc['account_code']);
         }
         $_SESSION['success_message'] = "All historical balances have been recalculated and repaired!";
@@ -37,18 +37,15 @@ if (isset($_GET['action'])) {
 }
 
 // Helper functions with consistent rounding
-function formatMoney($amount, $decimals = 2)
-{
+function formatMoney($amount, $decimals = 2) {
     return number_format(round($amount, $decimals), $decimals, '.', ',');
 }
 
-function roundAmount($amount, $decimals = 2)
-{
+function roundAmount($amount, $decimals = 2) {
     return round($amount, $decimals);
 }
 
-function generateVoucherNumber($type = 'RV')
-{
+function generateVoucherNumber($type = 'RV') {
     $date = date('Ymd');
     $sql = "SELECT COUNT(*) as count FROM ledger WHERE voucher_number LIKE '{$type}-{$date}-%'";
     $result = mysqli_query($GLOBALS['conn'], $sql);
@@ -59,11 +56,10 @@ function generateVoucherNumber($type = 'RV')
     return $type . '-' . $date . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
 }
 
-function calculateBeginningBalance($conn, $account_code, $transaction_date = null)
-{
+function calculateBeginningBalance($conn, $account_code, $transaction_date = null) {
     // Sanitize inputs
     $account_code = mysqli_real_escape_string($conn, $account_code);
-
+    
     // Get the absolute latest ending balance currently recorded in the system for this account.
     // In a chronological system, the very last entry in the DB for this code is the current state.
     $sql = "SELECT ending_balance 
@@ -71,51 +67,49 @@ function calculateBeginningBalance($conn, $account_code, $transaction_date = nul
             WHERE account_code = '$account_code' 
             ORDER BY transaction_date DESC, ledger_id DESC 
             LIMIT 1";
-
+    
     $result = mysqli_query($conn, $sql);
-
+    
     if ($result && mysqli_num_rows($result) > 0) {
         $row = mysqli_fetch_assoc($result);
         return roundAmount(floatval($row['ending_balance']));
-    }
-    else {
+    } else {
         return 0.00;
     }
 }
 
 // Function to recalculate ALL ending balances for an account
-function recalculateAccountEndingBalances($conn, $account_code)
-{
+function recalculateAccountEndingBalances($conn, $account_code) {
     // Get ALL entries for this account in chronological order
     $sql = "SELECT ledger_id, transaction_date, debit_amount, credit_amount 
             FROM ledger 
             WHERE account_code = '$account_code' 
             ORDER BY transaction_date ASC, ledger_id ASC";
-
+    
     $result = mysqli_query($conn, $sql);
-
+    
     if ($result && mysqli_num_rows($result) > 0) {
         $current_balance = 0.00;
-
+        
         // Process ALL entries from beginning to end
         while ($entry = mysqli_fetch_assoc($result)) {
             $movement = roundAmount($entry['debit_amount'] - $entry['credit_amount']);
             $ending_balance = roundAmount($current_balance + $movement);
-
+            
             // Update this entry
             $update_sql = "UPDATE ledger SET 
                           beginning_balance = $current_balance,
                           movement = $movement,
                           ending_balance = $ending_balance
                           WHERE ledger_id = " . $entry['ledger_id'];
-
+            
             mysqli_query($conn, $update_sql);
-
+            
             // Set current balance for next iteration
             $current_balance = $ending_balance;
         }
     }
-
+    
     return true;
 }
 
@@ -129,16 +123,16 @@ $success_message = '';
 // Auto-create ledger entries from payment transaction
 if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset($_SESSION['ledger_transaction'])) {
     $transaction_data = $_SESSION['ledger_transaction'];
-
+    
     // Determine cash/bank account based on payment method
     $payment_method = $transaction_data['payment_method'];
     $cash_account_code = '1101'; // Cash Account
     $bank_account_code = '1102'; // Bank Account
-
+    
     // Use bank account for bank transfers, cash for everything else
     $receivable_account = ($payment_method === 'Bank Transfer') ? $bank_account_code : $cash_account_code;
     $receivable_account_name = ($payment_method === 'Bank Transfer') ? 'Bank Account' : 'Cash Account';
-
+    
     // Define all accounts with their codes and classes
     $accounts = [
         'cash_bank' => [
@@ -172,7 +166,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
             'normal_balance' => 'Credit'
         ]
     ];
-
+    
     // Get breakdown amounts with rounding
     $breakdown = $transaction_data['breakdown'];
     $principal = roundAmount($breakdown['principal']);
@@ -181,39 +175,39 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
     $net_monitoring_fee = roundAmount($total_monitoring_fee / 1.18);
     $vat_amount = roundAmount($total_monitoring_fee - $net_monitoring_fee);
     $total_payment = roundAmount($breakdown['total_payment']);
-
+    
     // Verify rounded amounts still balance
     $rounded_total = roundAmount($principal + $interest + $net_monitoring_fee + $vat_amount);
     if (abs($total_payment - $rounded_total) > 0.01) {
         // Adjust principal if rounding causes imbalance
         $principal = roundAmount($principal + ($total_payment - $rounded_total));
     }
-
+    
     // ── VOUCHER NAMING FIX ──────────────────────────────────────────
     // Standardize naming: RV-CustomerCode-Timestamp for clear auditing
     $cust_ref = $transaction_data['customer_code'] ?: 'CUST';
     $voucher_number = 'RV-' . $cust_ref . '-' . date('His');
-
+    
     // Narration and particular (same for all entries in this transaction)
-    $narration = $transaction_data['narration'] ?:
-        "Payment from " . $transaction_data['customer_name'] .
-        " - Instalment #" . $transaction_data['instalment_number'];
-
+    $narration = $transaction_data['narration'] ?: 
+                "Payment from " . $transaction_data['customer_name'] . 
+                " - Instalment #" . $transaction_data['instalment_number'];
+    
     // Start database transaction
     mysqli_begin_transaction($conn);
-
+    
     try {
         $created_entries = [];
         $affected_accounts = []; // Track which accounts we're modifying
-
+        
         // Get the exact timestamp for all entries to maintain consistent ordering
         $timestamp = date('Y-m-d H:i:s');
-
+        
         // 1. DEBIT: Cash/Bank Account (Dr) - Total payment received
         $beginning_balance1 = calculateBeginningBalance($conn, $accounts['cash_bank']['code'], $transaction_data['transaction_date']);
         $movement1 = $total_payment; // Increase in assets (debit)
         $ending_balance1 = roundAmount($beginning_balance1 + $movement1);
-
+        
         $sql1 = "INSERT INTO ledger (
                     transaction_date, 
                     class, 
@@ -245,7 +239,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
                     " . intval($user_id) . ",
                     '" . $timestamp . "'
                 )";
-
+        
         if (!mysqli_query($conn, $sql1)) {
             throw new Exception("Failed to create cash/bank entry: " . mysqli_error($conn));
         }
@@ -258,12 +252,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
             'ending' => $ending_balance1
         ];
         $affected_accounts[] = $accounts['cash_bank']['code'];
-
+        
         // 2. CREDIT: Loan Portfolio (Cr) - Principal portion
         $beginning_balance2 = calculateBeginningBalance($conn, $accounts['loan_portfolio']['code'], $transaction_data['transaction_date']);
         $movement2 = roundAmount(-$principal); // Decrease in assets (credit)
         $ending_balance2 = roundAmount($beginning_balance2 + $movement2);
-
+        
         $sql2 = "INSERT INTO ledger (
                     transaction_date, 
                     class, 
@@ -295,7 +289,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
                     " . intval($user_id) . ",
                     '" . $timestamp . "'
                 )";
-
+        
         if (!mysqli_query($conn, $sql2)) {
             throw new Exception("Failed to create loan portfolio entry: " . mysqli_error($conn));
         }
@@ -308,12 +302,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
             'ending' => $ending_balance2
         ];
         $affected_accounts[] = $accounts['loan_portfolio']['code'];
-
+        
         // 3. CREDIT: Interest Income (Cr) - Interest portion
         $beginning_balance3 = calculateBeginningBalance($conn, $accounts['interest_income']['code'], $transaction_data['transaction_date']);
         $movement3 = roundAmount(-$interest); // Increase in revenue (credit)
         $ending_balance3 = roundAmount($beginning_balance3 + $movement3);
-
+        
         $sql3 = "INSERT INTO ledger (
                     transaction_date, 
                     class, 
@@ -345,7 +339,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
                     " . intval($user_id) . ",
                     '" . $timestamp . "'
                 )";
-
+        
         if (!mysqli_query($conn, $sql3)) {
             throw new Exception("Failed to create interest income entry: " . mysqli_error($conn));
         }
@@ -358,13 +352,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
             'ending' => $ending_balance3
         ];
         $affected_accounts[] = $accounts['interest_income']['code'];
-
+        
         // 4. CREDIT: Monitoring Fee Income (Cr) - NET amount (without VAT)
         if ($net_monitoring_fee > 0) {
             $beginning_balance4 = calculateBeginningBalance($conn, $accounts['monitoring_fee']['code'], $transaction_data['transaction_date']);
             $movement4 = roundAmount(-$net_monitoring_fee); // Increase in fee income (credit)
             $ending_balance4 = roundAmount($beginning_balance4 + $movement4);
-
+            
             $sql4 = "INSERT INTO ledger (
                         transaction_date, 
                         class, 
@@ -396,7 +390,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
                         " . intval($user_id) . ",
                         '" . $timestamp . "'
                     )";
-
+            
             if (!mysqli_query($conn, $sql4)) {
                 throw new Exception("Failed to create monitoring fee entry: " . mysqli_error($conn));
             }
@@ -410,13 +404,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
             ];
             $affected_accounts[] = $accounts['monitoring_fee']['code'];
         }
-
+        
         // 5. CREDIT: VAT Payable (Cr) - VAT portion of monitoring fee
         if ($vat_amount > 0) {
             $beginning_balance5 = calculateBeginningBalance($conn, $accounts['vat_payable']['code'], $transaction_data['transaction_date']);
             $movement5 = roundAmount(-$vat_amount); // Increase in liability (credit)
             $ending_balance5 = roundAmount($beginning_balance5 + $movement5);
-
+            
             $sql5 = "INSERT INTO ledger (
                         transaction_date, 
                         class, 
@@ -448,7 +442,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
                         " . intval($user_id) . ",
                         '" . $timestamp . "'
                     )";
-
+            
             if (!mysqli_query($conn, $sql5)) {
                 throw new Exception("Failed to create VAT entry: " . mysqli_error($conn));
             }
@@ -462,22 +456,22 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
             ];
             $affected_accounts[] = $accounts['vat_payable']['code'];
         }
-
+        
         // Verify double-entry accounting: Debits must equal Credits
         $total_debits = $total_payment;
         $total_credits = roundAmount($principal + $interest + $net_monitoring_fee + $vat_amount);
-
+        
         if (abs($total_debits - $total_credits) > 0.01) {
             throw new Exception("Accounting equation not balanced! Debits: " . $total_debits . " ≠ Credits: " . $total_credits);
         }
-
+        
         mysqli_commit($conn);
-
+        
         // CRITICAL: After inserting new entries, recalculate ALL ending balances for affected accounts
         foreach (array_unique($affected_accounts) as $account_code) {
             recalculateAccountEndingBalances($conn, $account_code);
         }
-
+        
         // Store success data
         $_SESSION['ledger_success'] = [
             'voucher' => $voucher_number,
@@ -487,16 +481,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
             'date' => $transaction_data['transaction_date'],
             'details' => $created_entries
         ];
-
+        
         // Clear the transaction data
         unset($_SESSION['ledger_transaction']);
-
+        
         // Redirect to show success
         header("Location: index.php?page=ledger&success=1&voucher=" . urlencode($voucher_number));
         exit();
-
-    }
-    catch (Exception $e) {
+        
+    } catch (Exception $e) {
         mysqli_rollback($conn);
         $error_message = "Failed to create ledger entries: " . $e->getMessage();
     }
@@ -505,24 +498,24 @@ if (isset($_GET['action']) && $_GET['action'] === 'create_from_payment' && isset
 // Handle regular journal entry submission - SIMPLE VERSION
 if (isset($_POST['save_journal_entry'])) {
     error_log("Manual journal entry POST received");
-
+    
     // Basic input validation
     $transaction_date = mysqli_real_escape_string($conn, $_POST['transaction_date']);
-    $voucher_number = mysqli_real_escape_string($conn, $_POST['voucher_number']);
-
+    $voucher_number   = mysqli_real_escape_string($conn, $_POST['voucher_number']);
+    
     // Get all particulars
-    $particulars = [];
-    $total_debit = 0;
-    $total_credit = 0;
+    $particulars     = [];
+    $total_debit     = 0;
+    $total_credit    = 0;
     $affected_accounts = [];
-
+    
     if (isset($_POST['particulars']) && is_array($_POST['particulars'])) {
         foreach ($_POST['particulars'] as $index => $particular) {
             if (!empty($particular['account_code'])) {
                 $account_code = mysqli_real_escape_string($conn, $particular['account_code']);
-                $debit = isset($particular['debit_amount']) ? roundAmount(floatval($particular['debit_amount'])) : 0.00;
+                $debit  = isset($particular['debit_amount'])  ? roundAmount(floatval($particular['debit_amount']))  : 0.00;
                 $credit = isset($particular['credit_amount']) ? roundAmount(floatval($particular['credit_amount'])) : 0.00;
-
+                
                 if ($debit < 0 || $credit < 0) {
                     continue;
                 }
@@ -530,73 +523,69 @@ if (isset($_POST['save_journal_entry'])) {
                 // ── KEY FIX: store the raw (un-escaped) narration text so we can
                 //    escape it fresh at INSERT time inside the per-entry loop.
                 $particulars[] = [
-                    'account_code' => $account_code,
-                    'account_name' => isset($particular['account_name']) ? $particular['account_name'] : '',
-                    'class' => isset($particular['class']) ? $particular['class'] : '',
-                    'debit_amount' => $debit,
-                    'credit_amount' => $credit,
+                    'account_code'         => $account_code,
+                    'account_name'         => isset($particular['account_name'])         ? $particular['account_name']         : '',
+                    'class'                => isset($particular['class'])                ? $particular['class']                : '',
+                    'debit_amount'         => $debit,
+                    'credit_amount'        => $credit,
                     // Keep the raw value — we will escape it in the INSERT below
                     'particular_narration' => isset($particular['particular_narration']) ? trim($particular['particular_narration']) : '',
                 ];
-
-                $total_debit += $debit;
+                
+                $total_debit  += $debit;
                 $total_credit += $credit;
-
+                
                 if (!in_array($account_code, $affected_accounts)) {
                     $affected_accounts[] = $account_code;
                 }
-
+                
                 error_log("Particular $index: Account=" . $account_code . ", Debit=$debit, Credit=$credit");
             }
         }
     }
-
+    
     error_log("Total Debit: $total_debit, Total Credit: $total_credit");
-
+    
     // Basic validation
     $errors = [];
-    if (empty($transaction_date))
-        $errors[] = "Transaction date is required";
-    if (empty($voucher_number))
-        $errors[] = "Voucher number is required";
-    if (count($particulars) < 1)
-        $errors[] = "At least one journal entry is required";
+    if (empty($transaction_date)) $errors[] = "Transaction date is required";
+    if (empty($voucher_number))   $errors[] = "Voucher number is required";
+    if (count($particulars) < 1) $errors[] = "At least one journal entry is required";
     if (abs($total_debit - $total_credit) > 0.01) {
         $errors[] = "Journal entry must balance! Debits (" . formatMoney($total_debit) . ") must equal Credits (" . formatMoney($total_credit) . ")";
     }
-
+    
     if (empty($errors)) {
         $timestamp = date('Y-m-d H:i:s');
         $success_count = 0;
-
+        
         mysqli_begin_transaction($conn);
-
+        
         try {
             foreach ($particulars as $particular) {
                 $account_code = $particular['account_code'];
 
                 // Fetch account details from chart_of_accounts
-                $account_sql = "SELECT class, account_name, normal_balance FROM chart_of_accounts WHERE account_code = '$account_code'";
+                $account_sql    = "SELECT class, account_name, normal_balance FROM chart_of_accounts WHERE account_code = '$account_code'";
                 $account_result = mysqli_query($conn, $account_sql);
-
+                
                 if ($account_result && mysqli_num_rows($account_result) > 0) {
                     $account = mysqli_fetch_assoc($account_result);
-                }
-                else {
+                } else {
                     $account = [
-                        'class' => !empty($particular['class']) ? $particular['class'] : 'Assets',
-                        'account_name' => !empty($particular['account_name']) ? $particular['account_name'] : 'Unknown Account',
+                        'class'          => !empty($particular['class'])        ? $particular['class']        : 'Assets',
+                        'account_name'   => !empty($particular['account_name']) ? $particular['account_name'] : 'Unknown Account',
                         'normal_balance' => 'Debit',
                     ];
                 }
-
+                
                 // Beginning / ending balance
                 $beginning_balance = calculateBeginningBalance($conn, $account_code, $transaction_date);
-                $debit_amount = $particular['debit_amount'];
-                $credit_amount = $particular['credit_amount'];
-                $movement = roundAmount($debit_amount - $credit_amount);
-                $ending_balance = roundAmount($beginning_balance + $movement);
-
+                $debit_amount      = $particular['debit_amount'];
+                $credit_amount     = $particular['credit_amount'];
+                $movement          = roundAmount($debit_amount - $credit_amount);
+                $ending_balance    = roundAmount($beginning_balance + $movement);
+                
                 // ── THE FIX ──────────────────────────────────────────────────────────
                 // Use THIS entry's own narration/particular text for BOTH the
                 // `particular` column AND the `narration` column, not a shared value.
@@ -612,8 +601,8 @@ if (isset($_POST['save_journal_entry'])) {
                 // ─────────────────────────────────────────────────────────────────────
 
                 $reference_type = 'MANUAL_JOURNAL';
-                $reference_id = 'MJE-' . date('YmdHis') . '-' . $voucher_number;
-
+                $reference_id   = 'MJE-' . date('YmdHis') . '-' . $voucher_number;
+                
                 $insert_sql = "INSERT INTO ledger (
                     transaction_date,
                     class,
@@ -634,7 +623,7 @@ if (isset($_POST['save_journal_entry'])) {
                     updated_at
                 ) VALUES (
                     '$transaction_date',
-                    '" . mysqli_real_escape_string($conn, $account['class']) . "',
+                    '" . mysqli_real_escape_string($conn, $account['class'])        . "',
                     '$account_code',
                     '" . mysqli_real_escape_string($conn, $account['account_name']) . "',
                     '$entry_particular',
@@ -651,70 +640,70 @@ if (isset($_POST['save_journal_entry'])) {
                     '$timestamp',
                     '$timestamp'
                 )";
-
+                
                 error_log("Executing SQL: " . $insert_sql);
                 error_log("Beginning Balance for $account_code: $beginning_balance, Movement: $movement, Ending: $ending_balance");
-
+                
                 if (mysqli_query($conn, $insert_sql)) {
                     $success_count++;
                     $ledger_id = mysqli_insert_id($conn);
                     error_log("Successfully inserted ledger entry ID: $ledger_id for account: $account_code");
-
+                    
                     // Update reference_id with actual ledger_id
                     $update_ref_sql = "UPDATE ledger SET 
                         reference_id = CONCAT('MJE-', ledger_id, '-', '$voucher_number') 
                         WHERE ledger_id = $ledger_id";
                     mysqli_query($conn, $update_ref_sql);
-                }
-                else {
+                } else {
                     $error_msg = mysqli_error($conn);
                     error_log("Failed to insert ledger entry for account $account_code: " . $error_msg);
                     throw new Exception("Failed to insert ledger entry for account $account_code: " . $error_msg);
                 }
             }
-
+            
             mysqli_commit($conn);
-
+            
             if ($success_count == count($particulars)) {
                 error_log("All journal entries saved successfully. Voucher: $voucher_number, Total entries: $success_count");
-
+                
                 // Recalculate ending balances for all affected accounts
                 foreach (array_unique($affected_accounts) as $account_code) {
                     recalculateAccountEndingBalances($conn, $account_code);
                 }
-
-                if (session_status() === PHP_SESSION_NONE)if (session_status() === PHP_SESSION_NONE) {
-                    session_start();                }
+                
+                if (session_status() === PHP_SESSION_NONE) if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
                 $_SESSION['success_message'] = "Journal entry saved successfully! Voucher: $voucher_number";
-
+                
                 echo "<script>window.location.href='?page=ledger'</script>";
                 exit();
             }
-
-        }
-        catch (Exception $e) {
+            
+        } catch (Exception $e) {
             mysqli_rollback($conn);
             $error_message = "Transaction failed: " . $e->getMessage();
             error_log("Transaction rolled back: " . $error_message);
-
-            if (session_status() === PHP_SESSION_NONE)if (session_status() === PHP_SESSION_NONE) {
-                session_start();            }
+            
+            if (session_status() === PHP_SESSION_NONE) if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
             $_SESSION['error_message'] = $error_message;
-
+            
             echo "<script>window.location.href='?page=ledger'</script>";
             exit();
         }
-
-    }
-    else {
+        
+    } else {
         $error_message = implode("<br>", $errors);
         error_log("Validation errors: " . $error_message);
-
-        if (session_status() === PHP_SESSION_NONE)if (session_status() === PHP_SESSION_NONE) {
-            session_start();        }
+        
+        if (session_status() === PHP_SESSION_NONE) if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
         $_SESSION['error_message'] = $error_message;
-        $_SESSION['form_data'] = $_POST;
-
+        $_SESSION['form_data']     = $_POST;
+        
         header("Location: index.php?page=ledger&error=1");
         exit();
     }
@@ -733,16 +722,16 @@ if (isset($_SESSION['ledger_success'])) {
         <hr>
         <h6>Entry Details:</h6>
         <ul>";
-
+    
     foreach ($ledger_success['details'] as $entry) {
-        $debit = $entry['debit'] > 0 ? "Dr: " . formatMoney($entry['debit']) : "";
-        $credit = $entry['credit'] > 0 ? "Cr: " . formatMoney($entry['credit']) : "";
-        $movement = isset($entry['movement']) ? " (Movement: " . ($entry['movement'] >= 0 ? '+' : '') . formatMoney($entry['movement']) . ")" : "";
+        $debit     = $entry['debit']  > 0 ? "Dr: " . formatMoney($entry['debit'])  : "";
+        $credit    = $entry['credit'] > 0 ? "Cr: " . formatMoney($entry['credit']) : "";
+        $movement  = isset($entry['movement'])  ? " (Movement: " . ($entry['movement'] >= 0 ? '+' : '') . formatMoney($entry['movement']) . ")" : "";
         $beginning = isset($entry['beginning']) ? " Beg: " . formatMoney($entry['beginning']) : "";
-        $ending = isset($entry['ending']) ? " End: " . formatMoney($entry['ending']) . "</li>" : "";
+        $ending    = isset($entry['ending'])    ? " End: " . formatMoney($entry['ending']) . "</li>" : "";
         $success_message .= "<li>" . htmlspecialchars($entry['account']) . " - " . $debit . $credit . $movement . $beginning . $ending;
     }
-
+    
     $success_message .= "</ul></div>";
     unset($_SESSION['ledger_success']);
 }
@@ -759,46 +748,46 @@ if (isset($_SESSION['error_message'])) {
 
 // Get search parameters
 $search_date_from = $_GET['date_from'] ?? date('Y-m-d', strtotime('-30 days'));
-$search_date_to = $_GET['date_to'] ?? date('Y-m-d');
-$view_type = $_GET['view_type'] ?? 'range';
-$search_month = $_GET['month'] ?? date('Y-m');
-$search_day = $_GET['day'] ?? date('Y-m-d');
-$search_account = $_GET['account'] ?? '';
-$search_voucher = $_GET['voucher'] ?? '';
+$search_date_to   = $_GET['date_to']   ?? date('Y-m-d');
+$view_type        = $_GET['view_type'] ?? 'range';
+$search_month     = $_GET['month']     ?? date('Y-m');
+$search_day       = $_GET['day']       ?? date('Y-m-d');
+$search_account   = $_GET['account']   ?? '';
+$search_voucher   = $_GET['voucher']   ?? '';
 
 if ($view_type === 'month' && !empty($search_month)) {
     $search_date_from = date('Y-m-01', strtotime($search_month . '-01'));
-    $search_date_to = date('Y-m-t', strtotime($search_month . '-01'));
+    $search_date_to   = date('Y-m-t',  strtotime($search_month . '-01'));
 }
 
 if ($view_type === 'day' && !empty($search_day)) {
     $search_date_from = $search_day;
-    $search_date_to = $search_day;
+    $search_date_to   = $search_day;
 }
 
 // Build WHERE clause
 $where_clauses = [];
 $params = [];
-$types = '';
+$types  = '';
 
 if (!empty($search_date_from) && !empty($search_date_to)) {
     $where_clauses[] = "l.transaction_date BETWEEN ? AND ?";
     $params[] = $search_date_from;
     $params[] = $search_date_to;
-    $types .= 'ss';
+    $types   .= 'ss';
 }
 
 if (!empty($search_account)) {
     $where_clauses[] = "(l.account_code LIKE ? OR l.account_name LIKE ?)";
     $params[] = "%" . $search_account . "%";
     $params[] = "%" . $search_account . "%";
-    $types .= 'ss';
+    $types   .= 'ss';
 }
 
 if (!empty($search_voucher)) {
     $where_clauses[] = "l.voucher_number LIKE ?";
     $params[] = "%" . $search_voucher . "%";
-    $types .= 's';
+    $types   .= 's';
 }
 
 $where_sql = !empty($where_clauses) ? "WHERE " . implode(" AND ", $where_clauses) : "";
@@ -823,18 +812,17 @@ if ($ledger_stmt && !empty($params)) {
 if ($ledger_stmt) {
     mysqli_stmt_execute($ledger_stmt);
     $ledger_result = mysqli_stmt_get_result($ledger_stmt);
-}
-else {
+} else {
     $ledger_result = mysqli_query($conn, $ledger_sql);
 }
 
-$months_sql = "SELECT DISTINCT DATE_FORMAT(transaction_date, '%Y-%m') as month FROM ledger ORDER BY month DESC";
+$months_sql    = "SELECT DISTINCT DATE_FORMAT(transaction_date, '%Y-%m') as month FROM ledger ORDER BY month DESC";
 $months_result = mysqli_query($conn, $months_sql);
 
-$dates_sql = "SELECT DISTINCT transaction_date as date FROM ledger ORDER BY date DESC LIMIT 100";
+$dates_sql    = "SELECT DISTINCT transaction_date as date FROM ledger ORDER BY date DESC LIMIT 100";
 $dates_result = mysqli_query($conn, $dates_sql);
 
-$accounts_sql = "SELECT account_code, account_name, class, normal_balance FROM chart_of_accounts WHERE is_active = 1 ORDER BY class, account_code";
+$accounts_sql    = "SELECT account_code, account_name, class, normal_balance FROM chart_of_accounts WHERE is_active = 1 ORDER BY class, account_code";
 $accounts_result = mysqli_query($conn, $accounts_sql);
 ?>
 
@@ -984,9 +972,9 @@ $accounts_result = mysqli_query($conn, $accounts_sql);
 <body>
     <div class="container-fluid py-4">
         <!-- Payment Transaction Info -->
-        <?php if (isset($_SESSION['ledger_transaction'])):
-    $data = $_SESSION['ledger_transaction'];
-?>
+        <?php if (isset($_SESSION['ledger_transaction'])): 
+            $data = $_SESSION['ledger_transaction'];
+        ?>
         <div class="row mb-4">
             <div class="col-12">
                 <div class="payment-info-card">
@@ -1022,8 +1010,7 @@ $accounts_result = mysqli_query($conn, $accounts_sql);
                 </div>
             </div>
         </div>
-        <?php
-endif; ?>
+        <?php endif; ?>
 
         <!-- Success/Error Messages -->
         <?php if (!empty($error_message)): ?>
@@ -1036,8 +1023,7 @@ endif; ?>
                 </div>
             </div>
         </div>
-        <?php
-endif; ?>
+        <?php endif; ?>
         
         <?php if (!empty($success_message)): ?>
         <div class="row mb-4">
@@ -1045,8 +1031,7 @@ endif; ?>
                 <?php echo $success_message; ?>
             </div>
         </div>
-        <?php
-endif; ?>
+        <?php endif; ?>
         <div class="mb-4">
             <a href="index.php?page=ledger_management" class="btn btn-outline-secondary">
                 <i class="fas fa-cog me-1"></i>Manage Ledger
@@ -1119,16 +1104,14 @@ endif; ?>
                                     <select class="form-select" name="month" id="month_select">
                                         <option value="">Select Month</option>
                                         <?php if ($months_result && mysqli_num_rows($months_result) > 0): ?>
-                                            <?php while ($month = mysqli_fetch_assoc($months_result)): ?>
+                                            <?php while($month = mysqli_fetch_assoc($months_result)): ?>
                                                 <option value="<?php echo htmlspecialchars($month['month']); ?>" 
                                                     <?php echo $search_month === $month['month'] ? 'selected' : ''; ?>>
                                                     <?php echo date('F Y', strtotime($month['month'] . '-01')); ?>
                                                 </option>
-                                            <?php
-    endwhile; ?>
+                                            <?php endwhile; ?>
                                             <?php mysqli_data_seek($months_result, 0); ?>
-                                        <?php
-endif; ?>
+                                        <?php endif; ?>
                                     </select>
                                 </div>
                             </div>
@@ -1142,16 +1125,14 @@ endif; ?>
                                     <select class="form-select" name="day" id="day_select">
                                         <option value="">Select Date</option>
                                         <?php if ($dates_result && mysqli_num_rows($dates_result) > 0): ?>
-                                            <?php while ($date = mysqli_fetch_assoc($dates_result)): ?>
+                                            <?php while($date = mysqli_fetch_assoc($dates_result)): ?>
                                                 <option value="<?php echo htmlspecialchars($date['date']); ?>" 
                                                     <?php echo $search_day === $date['date'] ? 'selected' : ''; ?>>
                                                     <?php echo date('d M Y', strtotime($date['date'])); ?>
                                                 </option>
-                                            <?php
-    endwhile; ?>
+                                            <?php endwhile; ?>
                                             <?php mysqli_data_seek($dates_result, 0); ?>
-                                        <?php
-endif; ?>
+                                        <?php endif; ?>
                                     </select>
                                 </div>
                             </div>
@@ -1186,18 +1167,15 @@ endif; ?>
                             Viewing: <?php echo date('F Y', strtotime($search_month . '-01')); ?>
                         </span>
                     </div>
-                    <?php
-elseif ($view_type === 'day' && !empty($search_day)): ?>
+                    <?php elseif ($view_type === 'day' && !empty($search_day)): ?>
                     <div class="mt-3">
                         <span class="badge bg-info period-badge">
                             Viewing: <?php echo date('d M Y', strtotime($search_day)); ?>
                         </span>
                     </div>
-                    <?php
-elseif (!empty($search_date_from) && !empty($search_date_to)): ?>
+                    <?php elseif (!empty($search_date_from) && !empty($search_date_to)): ?>
                     <div class="mt-3"></div>
-                    <?php
-endif; ?>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -1248,7 +1226,7 @@ endif; ?>
                                                     onchange="updateAccountDetails(this, 1)" required>
                                                 <option value="">Select Account</option>
                                                 <?php if ($accounts_result && mysqli_num_rows($accounts_result) > 0): ?>
-                                                    <?php while ($account = mysqli_fetch_assoc($accounts_result)): ?>
+                                                    <?php while($account = mysqli_fetch_assoc($accounts_result)): ?>
                                                     <option value="<?php echo htmlspecialchars($account['account_code']); ?>" 
                                                             data-class="<?php echo htmlspecialchars($account['class']); ?>"
                                                             data-name="<?php echo htmlspecialchars($account['account_name']); ?>">
@@ -1256,11 +1234,9 @@ endif; ?>
                                                         <?php echo htmlspecialchars($account['account_name']); ?> 
                                                         (<?php echo htmlspecialchars($account['class']); ?>)
                                                     </option>
-                                                    <?php
-    endwhile; ?>
+                                                    <?php endwhile; ?>
                                                     <?php mysqli_data_seek($accounts_result, 0); ?>
-                                                <?php
-endif; ?>
+                                                <?php endif; ?>
                                             </select>
                                             <input type="hidden" name="particulars[1][class]" id="class_1">
                                         </div>
@@ -1376,39 +1352,35 @@ endif; ?>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php
-$recent_sql = "SELECT transaction_date, voucher_number, account_code, 
+                                    <?php 
+                                    $recent_sql = "SELECT transaction_date, voucher_number, account_code, 
                                                   account_name, debit_amount, credit_amount
                                                   FROM ledger 
                                                   ORDER BY transaction_date DESC, ledger_id DESC 
                                                   LIMIT 15";
-$recent_result = mysqli_query($conn, $recent_sql);
-
-if ($recent_result && mysqli_num_rows($recent_result) > 0):
-    while ($recent = mysqli_fetch_assoc($recent_result)):
-?>
+                                    $recent_result = mysqli_query($conn, $recent_sql);
+                                    
+                                    if ($recent_result && mysqli_num_rows($recent_result) > 0):
+                                        while($recent = mysqli_fetch_assoc($recent_result)):
+                                    ?>
                                     <tr>
                                         <td><small><?php echo date('d/m', strtotime($recent['transaction_date'])); ?></small></td>
                                         <td><small class="voucher-code"><?php echo htmlspecialchars(substr($recent['voucher_number'], 0, 8)); ?></small></td>
                                         <td><small><?php echo htmlspecialchars($recent['account_code']); ?></small></td>
                                         <td class="text-end">
-                                            <?php if ($recent['debit_amount'] > 0): ?>
+                                            <?php if($recent['debit_amount'] > 0): ?>
                                                 <span class="badge bg-success">Dr: <?php echo formatMoney($recent['debit_amount']); ?></span>
-                                            <?php
-        else: ?>
+                                            <?php else: ?>
                                                 <span class="badge bg-danger">Cr: <?php echo formatMoney($recent['credit_amount']); ?></span>
-                                            <?php
-        endif; ?>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
-                                    <?php
-    endwhile;
-else: ?>
+                                    <?php endwhile;
+                                    else: ?>
                                     <tr>
                                         <td colspan="4" class="text-center text-muted py-3">No recent entries</td>
                                     </tr>
-                                    <?php
-endif; ?>
+                                    <?php endif; ?>
                                 </tbody>
                             </table>
                         </div>
@@ -1422,16 +1394,16 @@ endif; ?>
                     </div>
                     <div class="card-body">
                         <?php
-$today = date('Y-m-d');
-$today_sql = "SELECT 
+                        $today = date('Y-m-d');
+                        $today_sql = "SELECT 
                             COUNT(*) as total_entries,
                             SUM(debit_amount) as total_debits,
                             SUM(credit_amount) as total_credits
                             FROM ledger 
                             WHERE transaction_date = '$today'";
-$today_result = mysqli_query($conn, $today_sql);
-$today_stats = mysqli_fetch_assoc($today_result);
-?>
+                        $today_result = mysqli_query($conn, $today_sql);
+                        $today_stats  = mysqli_fetch_assoc($today_result);
+                        ?>
                         <div class="row text-center">
                             <div class="col-4">
                                 <h3><?php echo $today_stats['total_entries'] ?? 0; ?></h3>
@@ -1461,14 +1433,11 @@ $today_stats = mysqli_fetch_assoc($today_result);
                             <small>
                                 <?php if ($view_type === 'month' && !empty($search_month)): ?>
                                     Viewing: <?php echo date('F Y', strtotime($search_month . '-01')); ?>
-                                <?php
-elseif ($view_type === 'day' && !empty($search_day)): ?>
+                                <?php elseif ($view_type === 'day' && !empty($search_day)): ?>
                                     Viewing: <?php echo date('d M Y', strtotime($search_day)); ?>
-                                <?php
-else: ?>
+                                <?php else: ?>
                                     Showing last 1000 entries
-                                <?php
-endif; ?>
+                                <?php endif; ?>
                             </small>
                         </div>
                     </div>
@@ -1490,19 +1459,19 @@ endif; ?>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php if ($ledger_result && mysqli_num_rows($ledger_result) > 0):
-    $total_debit = 0;
-    $total_credit = 0;
-    while ($entry = mysqli_fetch_assoc($ledger_result)):
-        $entry['beginning_balance'] = roundAmount($entry['beginning_balance']);
-        $entry['debit_amount'] = roundAmount($entry['debit_amount']);
-        $entry['credit_amount'] = roundAmount($entry['credit_amount']);
-        $entry['movement'] = roundAmount($entry['movement']);
-        $entry['ending_balance'] = roundAmount($entry['ending_balance']);
-
-        $total_debit += $entry['debit_amount'];
-        $total_credit += $entry['credit_amount'];
-?>
+                                    <?php if ($ledger_result && mysqli_num_rows($ledger_result) > 0): 
+                                        $total_debit  = 0;
+                                        $total_credit = 0;
+                                        while($entry = mysqli_fetch_assoc($ledger_result)): 
+                                            $entry['beginning_balance'] = roundAmount($entry['beginning_balance']);
+                                            $entry['debit_amount']      = roundAmount($entry['debit_amount']);
+                                            $entry['credit_amount']     = roundAmount($entry['credit_amount']);
+                                            $entry['movement']          = roundAmount($entry['movement']);
+                                            $entry['ending_balance']    = roundAmount($entry['ending_balance']);
+                                            
+                                            $total_debit  += $entry['debit_amount'];
+                                            $total_credit += $entry['credit_amount'];
+                                    ?>
                                     <tr>
                                         <td class="text-nowrap">
                                             <small><?php echo date('d/m/y', strtotime($entry['transaction_date'])); ?></small>
@@ -1522,22 +1491,18 @@ endif; ?>
                                             <?php echo formatMoney($entry['beginning_balance']); ?>
                                         </td>
                                         <td class="text-end">
-                                            <?php if ($entry['debit_amount'] > 0): ?>
+                                            <?php if($entry['debit_amount'] > 0): ?>
                                                 <span class="text-success fw-bold"><?php echo formatMoney($entry['debit_amount']); ?></span>
-                                            <?php
-        else: ?>
+                                            <?php else: ?>
                                                 <span class="text-muted">-</span>
-                                            <?php
-        endif; ?>
+                                            <?php endif; ?>
                                         </td>
                                         <td class="text-end">
-                                            <?php if ($entry['credit_amount'] > 0): ?>
+                                            <?php if($entry['credit_amount'] > 0): ?>
                                                 <span class="text-danger fw-bold"><?php echo formatMoney($entry['credit_amount']); ?></span>
-                                            <?php
-        else: ?>
+                                            <?php else: ?>
                                                 <span class="text-muted">-</span>
-                                            <?php
-        endif; ?>
+                                            <?php endif; ?>
                                         </td>
                                         <td class="text-end <?php echo $entry['movement'] >= 0 ? 'text-success' : 'text-danger'; ?> fw-bold">
                                             <?php echo formatMoney($entry['movement']); ?>
@@ -1546,8 +1511,7 @@ endif; ?>
                                             <?php echo formatMoney($entry['ending_balance']); ?>
                                         </td>
                                     </tr>
-                                    <?php
-    endwhile; ?>
+                                    <?php endwhile; ?>
                                     <tr class="total-row">
                                         <td colspan="6" class="text-end fw-bold">Totals:</td>
                                         <td class="text-end fw-bold text-success"><?php echo formatMoney($total_debit); ?></td>
@@ -1555,16 +1519,14 @@ endif; ?>
                                         <td class="text-end fw-bold text-primary"><?php echo formatMoney(roundAmount($total_debit - $total_credit)); ?></td>
                                         <td class="text-end"></td>
                                     </tr>
-                                    <?php
-else: ?>
+                                    <?php else: ?>
                                     <tr>
                                         <td colspan="10" class="text-center text-muted py-4">
                                             <i class="fas fa-database fa-2x mb-3"></i><br>
                                             No ledger entries found
                                         </td>
                                     </tr>
-                                    <?php
-endif; ?>
+                                    <?php endif; ?>
                                 </tbody>
                             </table>
                         </div>
@@ -1781,18 +1743,11 @@ endif; ?>
 </body>
 </html>
 
-<?php
-
-if (isset($ledger_result))
-    mysqli_free_result($ledger_result);
-if (isset($accounts_result))
-    mysqli_free_result($accounts_result);
-if (isset($recent_result))
-    mysqli_free_result($recent_result);
-if (isset($months_result))
-    mysqli_free_result($months_result);
-if (isset($dates_result))
-    mysqli_free_result($dates_result);
-if (isset($conn))
-    mysqli_close($conn);
+<?php 
+if (isset($ledger_result))   mysqli_free_result($ledger_result);
+if (isset($accounts_result)) mysqli_free_result($accounts_result);
+if (isset($recent_result))   mysqli_free_result($recent_result);
+if (isset($months_result))   mysqli_free_result($months_result);
+if (isset($dates_result))    mysqli_free_result($dates_result);
+if (isset($conn))            mysqli_close($conn);
 ?>

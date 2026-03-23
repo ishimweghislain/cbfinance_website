@@ -137,13 +137,7 @@ function buildPaymentsQuery($conn, $sd, $ed, $cf) {
     return "SELECT li.instalment_id, li.loan_number, li.instalment_number, li.due_date, li.payment_date,
         li.principal_amount, li.interest_amount, li.management_fee,
         li.total_payment, li.paid_amount, li.principal_paid, li.interest_paid,
-        li.management_fee_paid, li.penalty_paid, li.balance_remaining, c.customer_name, c.customer_code, lp.loan_status,
-        lp.management_fee_amount as loan_disbursement_fee
-        FROM loan_instalments li
-        LEFT JOIN loan_portfolio lp ON li.loan_id = lp.loan_id
-        LEFT JOIN customers c ON lp.customer_id = c.customer_id
-        WHERE {$wc} ORDER BY li.payment_date DESC, li.loan_number ASC";
-}
+        li.management_fee_paid, li.penalty_paid, li.balance_remaining, c.customer_name, c.customer_code, lp.loan_status
         FROM loan_instalments li
         LEFT JOIN loan_portfolio lp ON li.loan_id = lp.loan_id
         LEFT JOIN customers c ON lp.customer_id = c.customer_id
@@ -295,7 +289,8 @@ function getHeaders($type) {
             return ['Loan Number', 'Customer Name', 'Instalment #', 'Due Date', 'Days Overdue',
                     'Principal', 'Interest', 'Mgmt Fee', 'Mgmt Fee Paid', 'Unpaid Mgmt Fee', 'Total Due', 'Balance Remaining', 'Provision Category'];
         case 'payments':
-            return ['Loan #', 'Customer', 'Inst. #', 'Due Date', 'Paid Date', 'Principal Paid', 'Interest Paid', 'Mgmt Fee', 'Penalties', 'Disbursement Fee', 'Total Collected', 'Remaining Balance', 'Status'];
+            return ['Loan Number', 'Customer Name', 'Instalment #', 'Due Date', 'Payment Date',
+                    'Principal Paid', 'Interest Paid', 'Mgmt Fee Paid', 'Penalty Paid', 'Total Collected', 'Balance Remaining'];
         case 'provisions':
             return ['Loan Number', 'Customer Name', 'Total Outstanding', 'Collateral Net Value',
                     'Exposure', 'Max Days Overdue', 'Provision Rate', 'Provision Amount',
@@ -498,23 +493,17 @@ function formatRows($type, $data) {
             break;
 
         case 'payments':
-            $t_pp = $t_ip = $t_mfp = $t_pen = $t_tc = $t_br = $t_df = 0;
+            $t_pp = $t_ip = $t_mfp = $t_pen = $t_tc = $t_br = 0;
             foreach ($data as $r) {
-                // Only count disbursement fee on the first instalment entry in the report
-                $disb_fee = ($r['instalment_number'] == 1) ? ($r['loan_disbursement_fee'] ?? 0) : 0;
-                
                 $t_pp   += $r['principal_paid'] ?? 0;
                 $t_ip   += $r['interest_paid'] ?? 0;
                 $t_mfp  += $r['management_fee_paid'] ?? 0;
                 $t_pen  += $r['penalty_paid'] ?? 0;
-                $t_df   += $disb_fee;
-                $t_tc   += ($r['principal_paid'] + $r['interest_paid'] + $r['management_fee_paid'] + ($r['penalty_paid'] ?? 0) + $disb_fee);
+                $t_tc   += ($r['paid_amount'] + ($r['penalty_paid'] ?? 0));
                 $t_br   += $r['balance_remaining'] ?? 0;
-                
+
                 $rows[] = [
-                    $r['loan_number'],
-                    $r['customer_name'],
-                    $r['instalment_number'],
+                    $r['loan_number'], $r['customer_name'], $r['instalment_number'],
                     $r['due_date']     ? date('Y-m-d', strtotime($r['due_date']))     : '',
                     $r['payment_date'] ? date('Y-m-d', strtotime($r['payment_date'])) : '',
                     number_format($r['principal_paid'], 2),

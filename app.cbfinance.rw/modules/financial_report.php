@@ -437,18 +437,37 @@ switch ($report_type) {
         $sql_unified = "SELECT 
             c.customer_id, 
             c.customer_name,
-            (SELECT SUM(CASE WHEN balance_remaining <= 0 THEN interest_amount ELSE interest_paid END) FROM loan_instalments WHERE loan_id IN (SELECT loan_id FROM loan_portfolio WHERE customer_id = c.customer_id) AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59') as int_pd,
-            (SELECT SUM(CASE WHEN balance_remaining <= 0 THEN management_fee ELSE management_fee_paid END) FROM loan_instalments WHERE loan_id IN (SELECT loan_id FROM loan_portfolio WHERE customer_id = c.customer_id) AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59') as mgmt_pd,
-            (SELECT SUM(CASE WHEN balance_remaining <= 0 THEN penalty_amount ELSE penalty_paid END) FROM loan_instalments WHERE loan_id IN (SELECT loan_id FROM loan_portfolio WHERE customer_id = c.customer_id) AND payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59') as pen_pd,
-            (SELECT SUM(lp2.management_fee_amount) FROM loan_portfolio lp2 WHERE lp2.customer_id = c.customer_id AND lp2.disbursement_date BETWEEN '$start_date' AND '$query_end_date' AND (SELECT management_fee FROM loan_instalments WHERE loan_id = lp2.loan_id AND instalment_number = 1 LIMIT 1) = 0) as disb_pd,
-            (SELECT SUM(af.amount) FROM application_fees af WHERE af.customer_id = c.customer_id AND af.status = 'Paid' AND af.transaction_date BETWEEN '$start_date' AND '$query_end_date') as app_pd,
+            -- Use the SAME capped logic as the Trial Balance for Interest, Management Fees and Penalties
+            (SELECT SUM(CASE WHEN li.balance_remaining <= 0 THEN li.interest_amount ELSE li.interest_paid END) 
+             FROM loan_instalments li 
+             JOIN loan_portfolio lp2 ON li.loan_id = lp2.loan_id 
+             WHERE lp2.customer_id = c.customer_id AND li.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59') as int_pd,
+            
+            (SELECT SUM(CASE WHEN li.balance_remaining <= 0 THEN li.management_fee ELSE li.management_fee_paid END) 
+             FROM loan_instalments li 
+             JOIN loan_portfolio lp2 ON li.loan_id = lp2.loan_id 
+             WHERE lp2.customer_id = c.customer_id AND li.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59') as mgmt_pd,
+            
+            (SELECT SUM(li.penalty_paid) 
+             FROM loan_instalments li 
+             JOIN loan_portfolio lp2 ON li.loan_id = lp2.loan_id 
+             WHERE lp2.customer_id = c.customer_id AND li.payment_date BETWEEN '$start_date 00:00:00' AND '$query_end_date 23:59:59') as pen_pd,
+            
+            -- Disbursement Fee (Upfront fees)
+            (SELECT SUM(lp2.management_fee_amount) 
+             FROM loan_portfolio lp2 
+             WHERE lp2.customer_id = c.customer_id 
+               AND lp2.disbursement_date BETWEEN '$start_date' AND '$query_end_date' 
+               AND (SELECT management_fee FROM loan_instalments WHERE loan_id = lp2.loan_id AND instalment_number = 1 LIMIT 1) = 0) as disb_pd,
+            
+            (SELECT SUM(af.amount) 
+             FROM application_fees af 
+             WHERE af.customer_id = c.customer_id AND af.status = 'Paid' AND af.transaction_date BETWEEN '$start_date' AND '$query_end_date') as app_pd,
+            
             COALESCE((SELECT lp3.interest_outstanding FROM loan_portfolio lp3 WHERE lp3.customer_id = c.customer_id AND lp3.loan_status != 'Closed' ORDER BY lp3.loan_id DESC LIMIT 1), 0) as int_bal,
             COALESCE((SELECT lp3.principal_outstanding FROM loan_portfolio lp3 WHERE lp3.customer_id = c.customer_id AND lp3.loan_status != 'Closed' ORDER BY lp3.loan_id DESC LIMIT 1), 0) as princ_bal,
             COALESCE((SELECT lp3.management_fee_amount - lp3.total_management_fees_paid FROM loan_portfolio lp3 WHERE lp3.customer_id = c.customer_id AND lp3.loan_status != 'Closed' ORDER BY lp3.loan_id DESC LIMIT 1), 0) as mgmt_bal
             FROM customers c
-            LEFT JOIN loan_portfolio lp ON c.customer_id = lp.customer_id
-            LEFT JOIN loan_payments p ON lp.loan_id = p.loan_id
-            GROUP BY c.customer_id
             ORDER BY c.customer_name";
             
         $res_unified = mysqli_query($conn, $sql_unified);

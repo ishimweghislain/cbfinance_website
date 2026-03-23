@@ -83,15 +83,17 @@ try {
     $rev_li = $conn->query("SELECT 
         SUM(CASE WHEN balance_remaining <= 0 THEN interest_amount ELSE interest_paid END) as interest,
         SUM(CASE WHEN balance_remaining <= 0 THEN management_fee ELSE management_fee_paid END) as periodic_fee,
-        SUM(CASE WHEN balance_remaining <= 0 THEN penalty_amount ELSE penalty_paid END) as penalty
+        SUM(penalty_paid) as penalty
         FROM loan_instalments")->fetch_assoc();
 
     // 4.2 Upfront Disbursement Fees (Account 4202)
+    // Matches logic in reports.php: Only if instalment 1 has management_fee = 0
     $rev_up = $conn->query("SELECT SUM(management_fee_amount) as upfront 
         FROM loan_portfolio lp 
-        WHERE (SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1) = 0")->fetch_assoc();
+        WHERE IFNULL((SELECT management_fee FROM loan_instalments WHERE loan_id = lp.loan_id AND instalment_number = 1 LIMIT 1), 0) = 0")->fetch_assoc();
 
     // 4.3 Ledger-only Revenue (Other 4xxx accounts)
+    // Includes 4301, 4204 etc.
     $rev_led = $conn->query("SELECT SUM(credit_amount - debit_amount) as other 
         FROM ledger 
         WHERE SUBSTRING(account_code, 1, 1) = '4' 

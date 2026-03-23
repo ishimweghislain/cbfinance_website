@@ -218,22 +218,19 @@ $current_period_earnings = 0;
 $previous_total_profit_loss = 0;
 $retained_earnings = 0;
 
-// Calculate revenues and expenses for CURRENT PERIOD
+// Calculate revenues and expenses for CURRENT PERIOD ONLY
 foreach ($trial_data as $account) {
     $account_code = $account['account_code'];
     $first_digit = substr($account_code, 0, 1);
-    $closing_balance = $account['closing_balance'];
     
-    // Revenue accounts (4xxx) - Credit balances are revenues
+    // Revenue accounts (4xxx)
     if ($first_digit == '4') {
-        // Revenue has negative balance (credit), so we take absolute value
-        $total_revenues += abs($closing_balance);
+        $total_revenues += abs($account['period_credit'] - $account['period_debit']);
     }
     
-    // Expense accounts (5xxx, 6xxx) - Debit balances are expenses
+    // Expense accounts (5xxx, 6xxx)
     if ($first_digit == '5' || $first_digit == '6') {
-        // Expenses have positive balance (debit)
-        $total_expenses += $closing_balance;
+        $total_expenses += abs($account['period_debit'] - $account['period_credit']);
     }
 }
 
@@ -469,20 +466,19 @@ switch ($report_type) {
             
             // Only include income statement accounts
             if ($first_digit == '4' || $first_digit == '5' || $first_digit == '6') {
+                
+                // Calculate display balance using PERIOD movement for Income Statement
+                $period_move = abs($account['period_credit'] - $account['period_debit']);
+                $account['display_balance'] = $period_move;
+                
                 $report_data[] = $account;
                 
-                // Calculate totals using PERIOD movement for Income Statement
-                $period_move = abs($account['period_credit'] - $account['period_debit']);
-                
+                // Calculate totals
                 if ($first_digit == '4') {
                     $total_revenue += $period_move;
                 } elseif ($first_digit == '5' || $first_digit == '6') {
                     $total_expenses += $period_move;
                 }
-                
-                // Keep closing balance for reference if needed, 
-                // but we might want to store the display_balance here
-                $account['display_balance'] = $period_move;
             }
         }
         
@@ -1405,14 +1401,14 @@ switch ($report_type) {
                             $period_move = $row['display_balance'] ?? abs($row['period_credit'] - $row['period_debit']);
 
                             if ($first_digit == '4') {
-                                if (!isset($revenue_groups[$class])) $revenue_groups[$class] = ['rows' => [], 'subtotal' => 0];
+                                if (!isset($revenue_groups[$class])) $revenue_groups[$class] = ['rows' => [], 'total' => 0];
                                 $revenue_groups[$class]['rows'][]    = $row;
-                                $revenue_groups[$class]['subtotal'] += $period_move;
+                                $revenue_groups[$class]['total'] += $period_move;
                                 $is_rev_total += $period_move;
                             } elseif ($first_digit == '5' || $first_digit == '6') {
-                                if (!isset($expense_groups[$class])) $expense_groups[$class] = ['rows' => [], 'subtotal' => 0];
+                                if (!isset($expense_groups[$class])) $expense_groups[$class] = ['rows' => [], 'total' => 0];
                                 $expense_groups[$class]['rows'][]    = $row;
-                                $expense_groups[$class]['subtotal'] += $period_move;
+                                $expense_groups[$class]['total'] += $period_move;
                                 $is_exp_total += $period_move;
                             }
                         }
@@ -1430,7 +1426,7 @@ switch ($report_type) {
                                     <?php foreach ($revenue_groups as $class_name => $group): ?>
                                     <div class="is-sub-label rev-sub"><?php echo htmlspecialchars($class_name); ?></div>
                                     <?php foreach ($group['rows'] as $row):
-                                         $display = abs($row['closing_balance']);
+                                         $display = $row['display_balance'] ?? abs($row['period_credit'] - $row['period_debit']);
                                     ?>
                                     <div class="is-row">
                                         <div class="acct-info">
@@ -1542,7 +1538,7 @@ switch ($report_type) {
                                     <?php foreach ($expense_groups as $class_name => $group): ?>
                                     <div class="is-sub-label exp-sub"><?php echo htmlspecialchars($class_name); ?></div>
                                     <?php foreach ($group['rows'] as $row):
-                                        $display = $row['closing_balance'];
+                                        $display = $row['display_balance'] ?? abs($row['period_debit'] - $row['period_credit']);
                                     ?>
                                     <div class="is-row">
                                         <div class="acct-info">

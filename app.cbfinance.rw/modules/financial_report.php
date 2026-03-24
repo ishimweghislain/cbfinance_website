@@ -371,8 +371,13 @@ array_splice($trial_data, $insert_position + 1, 0, [[
 // ========================================
 $final_tb_sum = 0;
 foreach ($trial_data as $row) {
-    if (isset($row['closing_balance'])) {
-        $final_tb_sum += floatval($row['closing_balance']);
+    if (isset($row['closing_balance']) && isset($row['account_code'])) {
+        $f_digit = substr($row['account_code'], 0, 1);
+        // Only sum Balance Sheet accounts (1, 2, 3) to avoid double-counting profit 
+        // that exists in both revenue accounts (4,5,6) and the injected earnings rows.
+        if (in_array($f_digit, ['1', '2', '3'])) {
+            $final_tb_sum += floatval($row['closing_balance']);
+        }
     }
 }
 

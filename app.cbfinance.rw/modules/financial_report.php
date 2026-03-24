@@ -176,12 +176,10 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
             
             $closing_balance = $initial_balance + $period_debit - $period_credit;
             
-            // Reconcile ONLY Balance Sheet accounts (Principal) to 3999.
-            // Revenue overrides are already reflected in Net Income, so adding them here would double-count.
-            if ($first_digit == '1' || $first_digit == '2' || $first_digit == '3') {
-                $override_diff = $ledger_closing - $closing_balance;
-                $GLOBALS['system_reconciliation_total'] = ($GLOBALS['system_reconciliation_total'] ?? 0) + $override_diff;
-            }
+            // Calculate the total system imbalance caused by portfolio overrides
+            // This adjustment ensures that Assets always equal Liabilities + Equity.
+            $override_diff = $ledger_closing - $closing_balance;
+            $GLOBALS['system_reconciliation_total'] = ($GLOBALS['system_reconciliation_total'] ?? 0) + $override_diff;
             
         } else {
             // ==========================================

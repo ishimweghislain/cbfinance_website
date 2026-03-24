@@ -82,19 +82,34 @@ if ($report_type == 'collection') {
 // Overdue Report
 if ($report_type == 'overdue') {
     $report_query = "SELECT 
-        l.*,
+        l.loan_id,
+        l.loan_number,
+        l.loan_status,
+        l.disbursement_amount,
+        l.total_outstanding,
+        l.principal_outstanding,
+        l.disbursement_date,
         c.customer_name,
         c.phone,
-        DATEDIFF(CURDATE(), i.due_date) as days_overdue_amount
+        MAX(DATEDIFF(CURDATE(), i.due_date)) as days_overdue_amount,
+        SUM(i.balance_remaining) as overdue_balance
         FROM loan_portfolio l
         JOIN customers c ON l.customer_id = c.customer_id
         JOIN loan_instalments i ON l.loan_id = i.loan_id
-        WHERE i.payment_status != 'Paid'
-        AND i.due_date < CURDATE()
-        AND i.balance_due > 0
-        ORDER BY i.due_date";
+        WHERE i.due_date < CURDATE()
+        AND i.balance_remaining > 0
+        AND l.disbursement_date BETWEEN ? AND ?
+        GROUP BY l.loan_id
+        ORDER BY days_overdue_amount DESC";
     
-    $overdue_data = $conn->query($report_query)->fetch_all(MYSQLI_ASSOC);
+    $stmt = $conn->prepare($report_query);
+    $stmt->bind_param('ss', $start_date, $end_date);
+    $stmt->execute();
+    $overdue_data = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    
+    // Calculate grand totals
+    $overdue_total_outstanding = array_sum(array_column($overdue_data, 'overdue_balance'));
+    $overdue_total_principal   = array_sum(array_column($overdue_data, 'principal_outstanding'));
 }
 ?>
 <!DOCTYPE html>
@@ -309,47 +324,50 @@ if ($report_type == 'overdue') {
                         <?php elseif ($report_type == 'overdue'): ?>
                             <div class="alert alert-danger">
                                 <h5>Overdue Loans Report</h5>
-                                <p>Showing <?php echo count($overdue_data); ?> overdue loans</p>
+                                <p>Showing <strong><?php echo count($overdue_data); ?></strong> overdue loans &mdash;
+                                   Period: <strong><?php echo date('d M Y', strtotime($start_date)); ?></strong> to <strong><?php echo date('d M Y', strtotime($end_date)); ?></strong>
+                                </p>
                             </div>
                             
-                            <table class="table table-bordered">
+                            <table class="table table-bordered table-hover">
                                 <thead class="table-dark">
                                     <tr>
                                         <th>Loan Number</th>
                                         <th>Customer</th>
                                         <th>Contact</th>
+                                        <th>Disbursement Date</th>
                                         <th>Disbursed Amount</th>
-                                        <th>Outstanding</th>
+                                        <th>Principal Outstanding</th>
+                                        <th>Overdue Balance</th>
                                         <th>Days Overdue</th>
-                                        <th>Last Payment</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php foreach ($overdue_data as $row): ?>
                                     <tr>
-                                        <td>
-                                            <a href="view_loan.php?id=<?php echo $row['loan_id']; ?>">
-                                                <?php echo htmlspecialchars($row['loan_number']); ?>
-                                            </a>
-                                        </td>
+                                        <td><strong><?php echo htmlspecialchars($row['loan_number']); ?></strong></td>
                                         <td><?php echo htmlspecialchars($row['customer_name']); ?></td>
                                         <td><?php echo htmlspecialchars($row['phone']); ?></td>
+                                        <td><?php echo date('d/m/Y', strtotime($row['disbursement_date'])); ?></td>
                                         <td><?php echo number_format($row['disbursement_amount'], 2); ?></td>
-                                        <td class="text-danger fw-bold"><?php echo number_format($row['total_outstanding'], 2); ?></td>
+                                        <td><?php echo number_format($row['principal_outstanding'], 2); ?></td>
+                                        <td class="text-danger fw-bold"><?php echo number_format($row['overdue_balance'], 2); ?></td>
                                         <td>
                                             <span class="badge bg-danger">
                                                 <?php echo $row['days_overdue_amount']; ?> days
                                             </span>
                                         </td>
-                                        <td>
-                                            <?php 
-                                            $last_payment = $conn->query("SELECT MAX(payment_date) as last_payment FROM loan_repayments WHERE loan_id = " . $row['loan_id'])->fetch_assoc();
-                                            echo $last_payment['last_payment'] ? date('d/m/Y', strtotime($last_payment['last_payment'])) : 'Never';
-                                            ?>
-                                        </td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>
+                                <tfoot class="table-dark fw-bold">
+                                    <tr>
+                                        <td colspan="5" class="text-end">TOTALS:</td>
+                                        <td><?php echo number_format($overdue_total_principal, 2); ?></td>
+                                        <td class="text-danger"><?php echo number_format($overdue_total_outstanding, 2); ?></td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
                             </table>
                             <style>
                                 /* Add these styles to the existing style section */

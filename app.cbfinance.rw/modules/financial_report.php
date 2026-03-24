@@ -72,6 +72,7 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
         $account_name = $account['account_name'];
         $class = $account['class'];
         $normal_balance = $account['normal_balance'];
+        $first_digit = substr($account_code, 0, 1);
         
         // Filter out specifically "Deferred VAT" accounts as requested
         if ($account_code === '2403' || $account_code === '2406' || 
@@ -175,10 +176,12 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
             
             $closing_balance = $initial_balance + $period_debit - $period_credit;
             
-            // Calculate the impact of this override on the trial balance sum
-            // We must add a matching adjustment to Equity to stay balanced.
-            $override_diff = $ledger_closing - $closing_balance;
-            $GLOBALS['system_reconciliation_total'] = ($GLOBALS['system_reconciliation_total'] ?? 0) + $override_diff;
+            // Reconcile ONLY Balance Sheet accounts (Principal) to 3999.
+            // Revenue overrides are already reflected in Net Income, so adding them here would double-count.
+            if ($first_digit == '1' || $first_digit == '2' || $first_digit == '3') {
+                $override_diff = $ledger_closing - $closing_balance;
+                $GLOBALS['system_reconciliation_total'] = ($GLOBALS['system_reconciliation_total'] ?? 0) + $override_diff;
+            }
             
         } else {
             // ==========================================
@@ -279,14 +282,14 @@ foreach ($trial_data as $account) {
     $account_code = $account['account_code'];
     $first_digit = substr($account_code, 0, 1);
     
-    // Revenue accounts (4xxx)
+    // Revenue accounts (4xxx) - Credits increase income
     if ($first_digit == '4') {
-        $total_revenues += abs($account['period_credit'] - $account['period_debit']);
+        $total_revenues += ($account['period_credit'] - $account['period_debit']);
     }
     
-    // Expense accounts (5xxx, 6xxx)
+    // Expense accounts (5xxx, 6xxx) - Debits increase expenses
     if ($first_digit == '5' || $first_digit == '6') {
-        $total_expenses += abs($account['period_debit'] - $account['period_credit']);
+        $total_expenses += ($account['period_debit'] - $account['period_credit']);
     }
 }
 

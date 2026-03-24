@@ -1,0 +1,19 @@
+Options -Indexes
+
+# ─── Hide .php Extension from URLs ───────────────────────────────────────────
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # 1. Redirect: strip .php if typed/linked directly in browser (301 permanent)
+    #    e.g. /services.php → /services
+    RewriteCond %{THE_REQUEST} \s/+(.+?)\.php[\s?] [NC]
+    RewriteRule ^ /%1 [R=301,NE,L]
+
+    # 2. Internally map clean URL to the .php file
+    #    e.g. /services → serves services.php transparently
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME}.php -f
+    RewriteRule ^([^\.]+)$ $1.php [NC,L]
+</IfModule>

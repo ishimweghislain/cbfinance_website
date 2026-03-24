@@ -14,10 +14,12 @@ if (mysqli_num_rows($check_coa) == 0) {
         ('1201', 'Loans to Customers', 'Balance Sheet', 'Asset', 'Current Asset', 'Debit', 1, NOW(), NOW())";
     if (mysqli_query($conn, $sql_insert_coa)) {
         echo "<span style='color:green'>SUCCESS: Account 1201 added.</span><br>";
-    } else {
+    }
+    else {
         echo "<span style='color:red'>ERROR adding account: " . mysqli_error($conn) . "</span><br>";
     }
-} else {
+}
+else {
     echo "Account 1201 already exists in Chart of Accounts.<br>";
 }
 
@@ -54,27 +56,28 @@ echo "<b>Adjustment needed to fix Ledger 1201: " . number_format($adjustment, 2)
 
 if (abs($adjustment) > 0.01) {
     echo "Creating Reconciliation Entry...<br>";
-    
+
+
     // We will debit 1201 to reach the correct balance.
     // We will credit Account 3001 (Capital) to acknowledge the initial funding source.
-    
+
     $voucher = "REC-" . date('YmdHis');
     $description = "System Reconciliation: Initial Portfolio Funding and Ledger Alignment";
     $date = date('Y-01-01'); // Record at start of year for cleanliness
-    
+
     // Debit 1201
     $sql_adj_1 = "INSERT INTO ledger 
         (transaction_date, class, account_code, account_name, transaction_type, reference_number, description, beginning_balance, debit_amount, credit_amount, movement, closing_balance, source_type, source_id, created_by, created_at, updated_at)
         VALUES 
         ('$date', 'Balance Sheet', '1201', 'Loans to Customers', 'RECONCILIATION', '$voucher', '$description', $ledger_balance, " . abs($adjustment) . ", 0.00, " . abs($adjustment) . ", $real_principal, 'manual', '0', 1, NOW(), NOW())";
-    
+
     // Credit 3001 (Capital)
     // First get current capital balance
     $res_cap = mysqli_query($conn, "SELECT SUM(credit_amount - debit_amount) as cap_bal FROM ledger WHERE account_code = '3001'");
     $row_cap = mysqli_fetch_assoc($res_cap);
     $current_cap = floatval($row_cap['cap_bal'] ?? 0);
     $new_cap = $current_cap + $adjustment;
-    
+
     $sql_adj_2 = "INSERT INTO ledger 
         (transaction_date, class, account_code, account_name, transaction_type, reference_number, description, beginning_balance, debit_amount, credit_amount, movement, closing_balance, source_type, source_id, created_by, created_at, updated_at)
         VALUES 
@@ -86,11 +89,13 @@ if (abs($adjustment) > 0.01) {
         mysqli_query($conn, $sql_adj_2);
         mysqli_commit($conn);
         echo "<span style='color:green'>SUCCESS: System balanced. Account 1201 and Capital adjusted.</span><br>";
-    } catch (Exception $e) {
+    }
+    catch (Exception $e) {
         mysqli_rollback($conn);
         echo "<span style='color:red'>ERROR during reconciliation: " . $e->getMessage() . "</span><br>";
     }
-} else {
+}
+else {
     echo "No adjustment needed for Account 1201.<br>";
 }
 

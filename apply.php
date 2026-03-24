@@ -1,7 +1,10 @@
-<?php 
+<?php
+
 require_once 'includes/db_connect.php';
-include 'includes/head.php'; 
-include 'includes/navbar.php'; 
+include 'includes/head.php';
+
+include 'includes/navbar.php';
+
 
 $success = false;
 $error = "";
@@ -11,14 +14,14 @@ $conn = getWebsiteConnection();
 
 // Initial track email if coming from URL
 $track_url_email = isset($_GET['track_email']) ? trim($_GET['track_email']) : '';
-$track_url_nid   = isset($_GET['track_nid'])   ? trim($_GET['track_nid'])   : '';
-$nid_step        = !empty($track_url_email) && empty($track_url_nid) && !isset($_GET['reapply']); // Show NID field if email given but not NID yet
+$track_url_nid = isset($_GET['track_nid']) ? trim($_GET['track_nid']) : '';
+$nid_step = !empty($track_url_email) && empty($track_url_nid) && !isset($_GET['reapply']); // Show NID field if email given but not NID yet
 
 // 1. HANDLE RE-APPLY (RESET TRACKING TO SHOW FORM)
 if (isset($_GET['reapply']) && $_GET['reapply'] == 'true' && !empty($track_url_email)) {
     // Clear the tracking email so the dashboard isn't shown and the form appears
     $track_url_email = '';
-    // Optional: We no longer delete rejected records to keep track of history
+// Optional: We no longer delete rejected records to keep track of history
 }
 
 // 2. HANDLE CORRECTION SUBMISSION
@@ -29,22 +32,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_correction'])) 
         $update_parts = [];
         $resub_tracker = [];
         $upload_dir = "app.cbfinance.rw/uploads/documents/";
-        if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+        if (!is_dir($upload_dir))
+            mkdir($upload_dir, 0777, true);
 
         foreach ($flagged as $field) {
-            if (empty($field)) continue;
-            
+            if (empty($field))
+                continue;
+
             if (strpos($field, 'doc_') === 0) {
                 if (isset($_FILES[$field]) && $_FILES[$field]['error'] == 0) {
                     $ext = strtolower(pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION));
                     $filename = $field . "_" . time() . "_" . mt_rand(100, 999) . "." . $ext;
-                    if(move_uploaded_file($_FILES[$field]['tmp_name'], $upload_dir . $filename)) {
+                    if (move_uploaded_file($_FILES[$field]['tmp_name'], $upload_dir . $filename)) {
                         $path = "uploads/documents/" . $filename;
                         $update_parts[] = "$field = '$path'";
                         $resub_tracker[] = $field;
                     }
                 }
-            } else {
+            }
+            else {
                 if (isset($_POST[$field])) {
                     $val = $conn->real_escape_string($_POST[$field]);
                     $update_parts[] = "$field = '$val'";
@@ -56,8 +62,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_correction'])) 
         if (!empty($update_parts)) {
             $resub_json = implode(',', $resub_tracker);
             $sql = "UPDATE customers SET " . implode(', ', $update_parts) . ", status = 'Pending', client_resubmitted = 1, resubmitted_fields = '$resub_json' WHERE customer_id = $cid";
-            if ($conn->query($sql)) { $success = "updated"; }
-            else { $error = "Update failed: " . $conn->error; }
+            if ($conn->query($sql)) {
+                $success = "updated";
+            }
+            else {
+                $error = "Update failed: " . $conn->error;
+            }
         }
     }
 }
@@ -66,50 +76,56 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_correction'])) 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application'])) {
     if ($conn) {
         $email = $conn->real_escape_string(trim($_POST['email']));
-        
+
         // Final sanity check for existing active applications
         $check = $conn->query("SELECT customer_id, status FROM customers WHERE email = '$email' ORDER BY created_at DESC LIMIT 1");
         if ($check && $check->num_rows > 0) {
             $existing = $check->fetch_assoc();
             $curr_stat = strtolower(trim($existing['status']));
-            
+
             // Fallback for DB enum issues
             if (empty($curr_stat) && !empty($existing['correction_fields'])) {
                 $curr_stat = 'action required';
             }
-            
+
             if ($curr_stat == 'rejected') {
-                // Keep the record for history, allow fresh application
-                // No action needed here, just let it proceed to INSERT
-            } elseif ($curr_stat == 'action required') {
+            // Keep the record for history, allow fresh application
+            // No action needed here, just let it proceed to INSERT
+            }
+            elseif ($curr_stat == 'action required') {
                 $already_applied = true;
                 $error = "CORRECTION NEEDED: Admin has requested updates on your previous application. Please use the tracking bar at the top right to fix and resubmit.";
-            } elseif ($curr_stat == 'pending') {
+            }
+            elseif ($curr_stat == 'pending') {
                 $already_applied = true;
                 $error = "You already have a PENDING application. Our team is reviewing it. Use the tracking bar above for live updates.";
-            } elseif ($curr_stat == 'approved') {
+            }
+            elseif ($curr_stat == 'approved') {
                 $already_applied = true;
                 $error = "Your previous application for this email was already APPROVED. Please contact support if you need a new loan.";
-            } else {
+            }
+            else {
                 // Handle cases like empty status or unknown
                 $conn->query("DELETE FROM customers WHERE customer_id = " . $existing['customer_id']);
             }
         }
-        
+
         if (!$already_applied) {
             $data = [];
-            foreach($_POST as $key => $val) { $data[$key] = $conn->real_escape_string($val); }
-            
+            foreach ($_POST as $key => $val) {
+                $data[$key] = $conn->real_escape_string($val);
+            }
+
             // Define upload directory - pointing into the app directory so admin can see them
             $upload_dir = "app.cbfinance.rw/uploads/documents/";
             if (!is_dir($upload_dir)) {
                 mkdir($upload_dir, 0777, true);
             }
-            
+
             $doc_paths = [];
             $required_files = ($data['loan_type'] == 'Salary') ? 
-                ['doc_id', 'doc_contract', 'doc_statement', 'doc_payslip', 'doc_marital'] : 
-                ['doc_id', 'doc_rdb', 'doc_statement_alt', 'doc_marital'];
+            ['doc_id', 'doc_contract', 'doc_statement', 'doc_payslip', 'doc_marital'] :
+            ['doc_id', 'doc_rdb', 'doc_statement_alt', 'doc_marital'];
 
             foreach ($required_files as $df) {
                 if (isset($_FILES[$df]) && $_FILES[$df]['error'] == 0) {
@@ -121,9 +137,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
                 }
             }
 
-            if (isset($doc_paths['doc_statement_alt'])) $doc_paths['doc_statement'] = $doc_paths['doc_statement_alt'];
+            if (isset($doc_paths['doc_statement_alt']))
+                $doc_paths['doc_statement'] = $doc_paths['doc_statement_alt'];
             $cols = ['doc_id', 'doc_contract', 'doc_statement', 'doc_payslip', 'doc_marital', 'doc_rdb'];
-            foreach($cols as $c) if(!isset($doc_paths[$c])) $doc_paths[$c] = null;
+            foreach ($cols as $c)
+                if (!isset($doc_paths[$c]))
+                    $doc_paths[$c] = null;
 
             $code = "PEND-" . mt_rand(100000, 999999);
             $sql = "INSERT INTO customers (
@@ -142,8 +161,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_application']))
                 '$data[province]', '$data[address]', '$data[location]', '$data[project]', '$data[project_location]', '$data[caution_location]', 'Pending'
             )";
 
-            if ($conn->query($sql)) $success = "created";
-            else $error = "Db Error: " . $conn->error;
+            if ($conn->query($sql))
+                $success = "created";
+            else
+                $error = "Db Error: " . $conn->error;
         }
     }
 }
@@ -153,24 +174,26 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
     if ($conn && !empty($track_url_nid)) {
         // Both email and NID provided — verify together
         $safe_email = $conn->real_escape_string($track_url_email);
-        $safe_nid   = $conn->real_escape_string($track_url_nid);
+        $safe_nid = $conn->real_escape_string($track_url_nid);
         $res = $conn->query("SELECT * FROM customers WHERE email = '$safe_email' AND id_number = '$safe_nid' ORDER BY created_at DESC LIMIT 1");
         if ($res && $res->num_rows > 0) {
             $found_customer = $res->fetch_assoc();
             $success = "found";
             $nid_step = false;
-        } elseif (!isset($_GET['reapply'])) {
+        }
+        elseif (!isset($_GET['reapply'])) {
             // Check if email alone exists (don't reveal which field failed for security)
             $email_check = $conn->query("SELECT customer_id FROM customers WHERE email = '$safe_email' LIMIT 1");
             if ($email_check && $email_check->num_rows > 0) {
                 $error = "Verification failed. The National ID does not match our records for this email.";
-            } else {
+            }
+            else {
                 $error = "No application found for this email.";
             }
             $nid_step = false;
         }
     }
-    // If only email given ($nid_step = true), we just show the NID input — no DB query yet
+// If only email given ($nid_step = true), we just show the NID input — no DB query yet
 }
 ?>
 
@@ -193,7 +216,8 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                     </button>
                     <a href="apply.php" class="bg-white/20 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg text-center">Cancel</a>
                 </form>
-            <?php else: ?>
+            <?php
+else: ?>
                 <!-- Step 1: Email -->
                 <form action="" method="GET" class="flex p-2 glass-panel rounded-2xl border border-white/20 shadow-2xl">
                     <input type="email" name="track_email" placeholder="Track existing application..." required
@@ -201,7 +225,8 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                            value="<?php echo htmlspecialchars($track_url_email); ?>">
                     <button type="submit" class="bg-primary-blue hover:bg-blue-600 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ml-2 shadow-lg">Track</button>
                 </form>
-            <?php endif; ?>      
+            <?php
+endif; ?>      
         </div>
 
         <?php if ($success === "found" && isset($found_customer)): ?>
@@ -211,19 +236,20 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                 <div class="inline-block px-4 py-1.5 bg-blue-50 rounded-full text-[10px] font-black text-primary-blue uppercase tracking-widest mb-10 shadow-sm">ID: <?php echo $found_customer['customer_code']; ?></div>
 
                 <div class="max-w-2xl mx-auto p-12 rounded-[2.5rem] bg-white shadow-2xl border border-gray-100 relative">
-                    <?php 
-                    $stat = trim($found_customer['status']);
-                    // Fallback for cases where DB enum doesn't yet support 'Action Required'
-                    if (empty($stat) && !empty($found_customer['correction_fields'])) {
-                        $stat = 'Action Required';
-                    }
+                    <?php
+    $stat = trim($found_customer['status']);
+    // Fallback for cases where DB enum doesn't yet support 'Action Required'
+    if (empty($stat) && !empty($found_customer['correction_fields'])) {
+        $stat = 'Action Required';
+    }
 
-                    if ($stat == 'Pending'): ?>
+    if ($stat == 'Pending'): ?>
                         <div class="w-20 h-20 bg-amber-50 text-amber-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-sm border border-amber-100"><i class="fas fa-clock text-3xl"></i></div>
                         <h4 class="text-2xl font-black text-gray-800 uppercase tracking-tight">Review In Progress</h4>
                         <p class="text-sm text-gray-500 mt-4 leading-relaxed font-bold">We are currently verifying your credentials. You will be notified shortly.</p>
                         
-                    <?php elseif ($stat == 'Approved'): ?>
+                    <?php
+    elseif ($stat == 'Approved'): ?>
                         <div class="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-sm border border-emerald-100"><i class="fas fa-check-double text-3xl"></i></div>
                         <h4 class="text-2xl font-black text-gray-800 uppercase tracking-tight">Congratulations!</h4>
                         <p class="text-sm text-gray-500 mt-4 font-bold">Your application has been approved.</p>
@@ -232,7 +258,8 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                             VISIT IKAZE HOUSE, 2ND FLOOR <br> OR CALL +250 796 880 272
                         </div>
 
-                    <?php elseif ($stat == 'Action Required'): ?>
+                    <?php
+    elseif ($stat == 'Action Required'): ?>
                         <div class="w-20 h-20 bg-blue-50 text-primary-blue rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-sm border border-blue-100"><i class="fas fa-file-signature text-3xl"></i></div>
                         <h4 class="text-2xl font-black text-gray-800 uppercase tracking-tight">Updates Needed</h4>
                         <div class="mt-6 p-6 bg-blue-50/50 rounded-2xl border border-blue-100 text-left mb-10">
@@ -244,20 +271,21 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                             <form action="" method="POST" enctype="multipart/form-data" class="space-y-8">
                                 <input type="hidden" name="customer_id" value="<?php echo $found_customer['customer_id']; ?>">
                                 <input type="hidden" name="flagged_fields" value="<?php echo $found_customer['correction_fields']; ?>">
-                                <?php 
-                                $fl = explode(',', $found_customer['correction_fields']);
-                                $lbls = [
-                                    'customer_name' => 'Name', 'id_number' => 'National ID', 'phone' => 'Phone',
-                                    'email' => 'Email', 'doc_id' => 'ID Doc', 'doc_contract' => 'Contract',
-                                    'doc_statement' => 'Statement', 'doc_payslip' => 'Payslip', 
-                                    'doc_marital' => 'Marital Doc', 'doc_rdb' => 'RDB Cert'
-                                ];
-                                foreach($fl as $f): 
-                                    if(empty($f)) continue;
-                                ?>
+                                <?php
+        $fl = explode(',', $found_customer['correction_fields']);
+        $lbls = [
+            'customer_name' => 'Name', 'id_number' => 'National ID', 'phone' => 'Phone',
+            'email' => 'Email', 'doc_id' => 'ID Doc', 'doc_contract' => 'Contract',
+            'doc_statement' => 'Statement', 'doc_payslip' => 'Payslip',
+            'doc_marital' => 'Marital Doc', 'doc_rdb' => 'RDB Cert'
+        ];
+        foreach ($fl as $f):
+            if (empty($f))
+                continue;
+?>
                                     <div class="space-y-2">
                                         <label class="text-[10px] font-black uppercase text-gray-400 pl-2"><?php echo $lbls[$f] ?? $f; ?> *</label>
-                                        <?php if(strpos($f, 'doc_') === 0): ?>
+                                        <?php if (strpos($f, 'doc_') === 0): ?>
                                             <div class="relative group">
                                                 <input type="file" name="<?php echo $f; ?>" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="fnUpdate(this)">
                                                 <div class="p-5 bg-white border-2 border-dashed border-gray-100 rounded-2xl flex items-center justify-between group-hover:border-primary-blue transition-all">
@@ -265,16 +293,20 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                                                     <span class="bg-gray-100 px-4 py-2 rounded-xl text-[9px] font-black">CHOOSE</span>
                                                 </div>
                                             </div>
-                                        <?php else: ?>
+                                        <?php
+            else: ?>
                                             <input type="text" name="<?php echo $f; ?>" required class="w-full text-sm bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:bg-white focus:border-primary-blue transition-all font-bold" value="<?php echo htmlspecialchars($found_customer[$f]); ?>">
-                                        <?php endif; ?>
+                                        <?php
+            endif; ?>
                                     </div>
-                                <?php endforeach; ?>
+                                <?php
+        endforeach; ?>
                                 <button type="submit" name="submit_correction" class="w-full bg-primary-blue text-white py-5 rounded-2xl font-black text-xs shadow-2xl hover:bg-blue-700 transition-all active:scale-95">SEND UPDATES NOW</button>
                             </form>
                         </div>
 
-                    <?php else: ?>
+                    <?php
+    else: ?>
                         <!-- REJECTED -->
                         <div class="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-sm border border-rose-100"><i class="fas fa-ban text-3xl"></i></div>
                         <h4 class="text-2xl font-black text-gray-800 uppercase tracking-tight">Application Rejected</h4>
@@ -283,14 +315,16 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                             <p class="text-sm text-rose-900 font-bold italic">"<?php echo htmlspecialchars($found_customer['rejection_reason'] ?: 'Eligibility criteria not met.'); ?>"</p>
                         </div>
                         <a href="apply.php?reapply=true&track_email=<?php echo urlencode($found_customer['email']); ?>" class="bg-primary-blue text-white px-10 py-5 rounded-2xl font-black text-xs shadow-2xl hover:bg-blue-700 transition-all">START NEW APPLICATION</a>
-                    <?php endif; ?>
+                    <?php
+    endif; ?>
                 </div>
             </div>
 
-        <?php elseif ($success === "updated" || $success === "created"): ?>
+        <?php
+elseif ($success === "updated" || $success === "created"): ?>
             <div class="glass-card rounded-[3rem] p-16 text-center shadow-2xl animate-in">
                 <div class="w-24 h-24 bg-emerald-500 text-white rounded-[2.5rem] flex items-center justify-center mx-auto mb-10 shadow-2xl shadow-emerald-200"><i class="fas fa-check text-4xl"></i></div>
-                <h3 class="text-4xl font-black text-gray-900 mb-4"><?php echo ($success === 'updated') ? 'Resubmitted!' : 'Application Sent!'; ?></h3>
+                <h3 class="text-4xl font-black text-gray-900 mb-4"><?php echo($success === 'updated') ? 'Resubmitted!' : 'Application Sent!'; ?></h3>
                 <p class="text-gray-500 text-sm font-bold max-w-sm mx-auto mb-6">Our team has received your details. Track live status using your email anytime.</p>
                 <div class="bg-amber-50 p-6 rounded-2xl border border-amber-100 max-w-md mx-auto">
                     <p class="text-[11px] text-amber-900 font-black uppercase tracking-widest mb-2"><i class="fas fa-exclamation-triangle me-2"></i> Final Confirmation Required</p>
@@ -302,7 +336,8 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                 </div>
             </div>
 
-        <?php else: ?>
+        <?php
+else: ?>
             <!-- NEW APPLICATION FORM -->
             <div id="form-container" class="glass-card rounded-[3rem] shadow-2xl p-10 md:p-16 border border-white/40 animate-in">
                 <div class="text-center mb-16">
@@ -312,7 +347,8 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
 
                 <?php if ($error): ?>
                     <div class="bg-rose-500 text-white p-5 rounded-2xl mb-12 text-xs text-center font-black shadow-2xl shadow-rose-200 animate-pulse border-0"><?php echo $error; ?></div>
-                <?php endif; ?>
+                <?php
+    endif; ?>
                 
                 <form id="loanForm" method="POST" enctype="multipart/form-data" class="space-y-16">
                     <input type="hidden" name="submit_application" value="1">
@@ -447,7 +483,8 @@ if (!empty($track_url_email) && !isset($_POST['submit_application']) && !isset($
                     </div>
                 </form>
             </div>
-        <?php endif; ?>
+        <?php
+endif; ?>
     </div>
 </main>
 
@@ -589,7 +626,10 @@ input:focus, select:focus { border-color: #1e40af !important; box-shadow: 0 0 0 
 .border-rose-400 { border-color: #fb7185 !important; border-width: 2px !important; }
 </style>
 
-<?php 
-include 'includes/bottom_nav.php'; 
-include 'includes/footer.php'; 
+<?php
+
+include 'includes/bottom_nav.php';
+
+include 'includes/footer.php';
+
 ?>

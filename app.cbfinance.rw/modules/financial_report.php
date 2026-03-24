@@ -85,7 +85,17 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
         // Users want these to reflect ACTUAL system data (from loan tables)
         // ==========================================
         if (in_array($account_code, ['1201', '4101', '4201', '4202', '4205', '4301'])) {
+            // Capture original Ledger balance for this account to maintain total system balance
+            $initial_ledger_sql = "SELECT SUM(debit_amount - credit_amount) as op FROM ledger WHERE account_code = '$account_code' AND transaction_date < '$start_date'";
+            $res_ledger_open = mysqli_fetch_assoc(mysqli_query($conn, $initial_ledger_sql));
+            $move_ledger_sql = "SELECT SUM(debit_amount) as d, SUM(credit_amount) as c FROM ledger WHERE account_code = '$account_code' AND transaction_date BETWEEN '$start_date' AND '$query_end_date'";
+            $res_ledger_move = mysqli_fetch_assoc(mysqli_query($conn, $move_ledger_sql));
             
+            $ledger_init = roundAmount(floatval($res_ledger_open['op'] ?? 0));
+            $ledger_deb = roundAmount(floatval($res_ledger_move['d'] ?? 0));
+            $ledger_cre = roundAmount(floatval($res_ledger_move['c'] ?? 0));
+            $ledger_closing = $ledger_init + $ledger_deb - $ledger_cre;
+
             $initial_balance = 0;
             $period_debit = 0;
             $period_credit = 0;
@@ -165,6 +175,11 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
             
             $closing_balance = $initial_balance + $period_debit - $period_credit;
             
+            // Calculate the impact of this override on the trial balance sum
+            // We must add a matching adjustment to Equity to stay balanced.
+            $override_diff = $ledger_closing - $closing_balance;
+            $GLOBALS['system_reconciliation_total'] = ($GLOBALS['system_reconciliation_total'] ?? 0) + $override_diff;
+            
         } else {
             // ==========================================
             // STEP 1: Get OPENING BALANCE (before start_date)
@@ -226,6 +241,21 @@ function calculateTrialBalance($conn, $start_date, $end_date) {
             'period_credit' => $period_credit,     // Movements - Credit
             'closing_balance' => $closing_balance,  // Final balance
             'is_calculated' => false
+        ];
+    }
+    
+    // Insert System Reconciliation row if portfolio overrides created a balance gap
+    if (isset($GLOBALS['system_reconciliation_total']) && roundAmount($GLOBALS['system_reconciliation_total']) != 0) {
+        $trial_data[] = [
+            'account_code' => '3999',
+            'account_name' => 'System Reconciliation (Portfolio Adj.)',
+            'class' => 'Equity',
+            'normal_balance' => 'Credit',
+            'initial_balance' => 0,
+            'period_debit' => 0,
+            'period_credit' => 0,
+            'closing_balance' => roundAmount($GLOBALS['system_reconciliation_total']),
+            'is_calculated' => true
         ];
     }
     
@@ -326,7 +356,7 @@ foreach ($trial_data as $index => $account) {
 
 // Remove any existing 3101 or 3102 accounts to avoid duplicates
 $trial_data = array_filter($trial_data, function($account) {
-    return !in_array($account['account_code'], ['3101', '3102']);
+    return !in_array($account['account_code'], ['3101', '3102', '3103']);
 });
 $trial_data = array_values($trial_data); // Re-index array
 

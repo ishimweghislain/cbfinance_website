@@ -109,7 +109,9 @@ function buildCustomersQuery($conn, $sd, $ed, $cf) {
 function buildOverdueQuery($conn, $sd, $ed, $cf) {
     $sd = mysqli_real_escape_string($conn, $sd);
     $ed = mysqli_real_escape_string($conn, $ed);
-    $w  = ["li.balance_remaining > 0", "li.due_date < CURDATE()", "li.due_date BETWEEN '{$sd}' AND '{$ed}'"];
+    // Filter by DISBURSEMENT DATE (matches the Loans page Total Overdue card)
+    // This answers: "For loans disbursed in this period, which instalments are currently overdue?"
+    $w  = ["li.balance_remaining > 0", "li.due_date < CURDATE()", "lp.disbursement_date BETWEEN '{$sd}' AND '{$ed}'"];
     if ($cf) $w[] = "lp.customer_id = " . intval($cf);
 
     $wc = implode(' AND ', $w);

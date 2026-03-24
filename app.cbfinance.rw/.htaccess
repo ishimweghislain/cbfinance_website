@@ -1,8 +1,27 @@
 
-
 # php -- BEGIN cPanel-generated handler, do not edit
 # Set the “ea-php72” package as the default “PHP” programming language.
 <IfModule mime_module>
   AddHandler application/x-httpd-ea-php72 .php .php7 .phtml
 </IfModule>
 # php -- END cPanel-generated handler, do not edit
+
+Options -Indexes
+
+# ─── Hide .php Extension from URLs ───────────────────────────────────────────
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # 1. Redirect: strip .php if typed directly in browser (301 permanent)
+    #    e.g. /index.php → /index
+    RewriteCond %{THE_REQUEST} \s/+(.+?)\.php[\s?] [NC]
+    RewriteRule ^ /%1 [R=301,NE,L]
+
+    # 2. Internally map clean URL to the .php file
+    #    e.g. /dashboard → serves dashboard.php transparently
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME}.php -f
+    RewriteRule ^([^\.]+)$ $1.php [NC,L]
+</IfModule>
